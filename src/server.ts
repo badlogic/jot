@@ -1881,6 +1881,7 @@ function renderAppShell(
     <div id="app"></div>
     <script>window.__OWNER_TOKEN_KEY__ = ${JSON.stringify(ownerLocalStorageTokenKey)};</script>
     <script>document.querySelectorAll('.theme-toggle').forEach(function(b){b.innerHTML=window.__themeIcon(document.documentElement.getAttribute('data-theme')||'dark')});</script>
+    <script src="/static/components.js"></script>
     <script src="/static/app.js" defer></script>
   </body>
 </html>`;

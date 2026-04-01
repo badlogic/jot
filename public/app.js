@@ -59,10 +59,10 @@
             <div class="topbar-title">notes</div>
           </div>
           <div class="topbar-right">
-            <button type="button" class="icon-button" id="newNoteButton" aria-label="New note">+</button>
-            <button type="button" class="icon-button ghost" id="settingsButton" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-            <button type="button" class="icon-button ghost" id="logoutButton" aria-label="Logout" title="Logout"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10.5 11.5L14 8l-3.5-3.5M6 8h8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-            <button type="button" class="text-button theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
+            <jot-icon-button icon="plus" label="New note" id="newNoteButton"></jot-icon-button>
+            <jot-icon-button icon="settings" label="Settings" id="settingsButton"></jot-icon-button>
+            <jot-icon-button icon="logout" label="Logout" id="logoutButton"></jot-icon-button>
+            <button type="button" class="jot-btn-icon jot-btn-icon--md theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
           </div>
         </header>
         <main class="list-page">
@@ -98,7 +98,7 @@
     });
 
     noteList.addEventListener("click", async (event) => {
-      const deleteBtn = event.target.closest(".note-delete-btn");
+      const deleteBtn = event.target.closest(".note-delete-btn") || event.target.closest("jot-icon-button.note-delete-btn");
       if (deleteBtn) {
         event.stopPropagation();
         const id = deleteBtn.dataset.noteId;
@@ -120,12 +120,12 @@
         <div class="modal settings-modal" role="dialog" aria-modal="true">
           <div class="settings-header">
             <h2 class="settings-title">Settings</h2>
-            <button type="button" class="icon-button ghost" id="settingsClose" aria-label="Close">&times;</button>
+            <jot-icon-button icon="close" label="Close" id="settingsClose"></jot-icon-button>
           </div>
           <div class="settings-section">
             <div class="settings-section-header">
               <h3 class="settings-section-title">API Keys</h3>
-              <button type="button" class="text-button" id="createKeyButton">+ new key</button>
+              <jot-button variant="ghost" size="sm" id="createKeyButton">+ new key</jot-button>
             </div>
             <div id="apiKeysList"></div>
           </div>
@@ -152,7 +152,7 @@
       });
 
       apiKeysList.addEventListener("click", async (event) => {
-        const copyBtn = event.target.closest("[data-copy-key]");
+        const copyBtn = event.target.closest("[data-copy-key]") || event.target.closest("jot-icon-button[data-copy-key]");
         if (copyBtn) {
           try {
             await navigator.clipboard.writeText(copyBtn.dataset.copyKey);
@@ -161,7 +161,7 @@
           } catch {}
           return;
         }
-        const deleteBtn = event.target.closest("[data-delete-key]");
+        const deleteBtn = event.target.closest("[data-delete-key]") || event.target.closest("jot-icon-button[data-delete-key]");
         if (!deleteBtn) return;
         if (!confirm("Delete this API key?")) return;
         await api(`/api/keys/${deleteBtn.dataset.deleteKey}`, { method: "DELETE" });
@@ -177,7 +177,7 @@
                   <span class="api-key-label">${escapeHtml(key.label)}</span>
                   <span class="api-key-meta">${escapeHtml(formatDate(key.createdAt))}</span>
                 </div>
-                <button type="button" class="icon-action danger" data-delete-key="${escapeHtml(key.id)}" aria-label="Delete key" title="Delete key"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 4.5h9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6.2 4.5V3.4c0-.5.4-.9.9-.9h1.8c.5 0 .9.4.9.9v1.1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="m5 6.2.5 6.1c0 .4.4.7.8.7h3.4c.4 0 .8-.3.8-.7l.5-6.1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <jot-icon-button icon="trash" label="Delete key" data-delete-key="${escapeHtml(key.id)}" size="sm" danger></jot-icon-button>
               </div>
             `).join("")
           : '<div class="api-keys-empty">No API keys yet.</div>';
@@ -190,7 +190,7 @@
         if (existing) existing.remove();
         const secret = document.createElement("div");
         secret.className = "api-key-secret";
-        secret.innerHTML = `<code>${escapeHtml(key)}</code><button type="button" class="icon-action" data-copy-key="${escapeHtml(key)}" aria-label="Copy key" title="Copy key"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="7" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 5.5V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v6.5a1 1 0 0 0 1 1h1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>`;
+        secret.innerHTML = `<code>${escapeHtml(key)}</code><jot-icon-button icon="copy" label="Copy key" data-copy-key="${escapeHtml(key)}" size="sm"></jot-icon-button>`;
         const deleteBtn = row.querySelector(".icon-action[data-delete-key]");
         row.insertBefore(secret, deleteBtn);
       }
@@ -206,7 +206,7 @@
       document.querySelector(".list-search-wrap").style.display = (hasNotes || hasQuery) ? "" : "none";
 
       if (!hasNotes && !hasQuery) {
-        noteList.innerHTML = `<div class="empty-state-create"><p class="empty-state-text">No notes yet.</p><button type="button" class="empty-state-button" id="emptyCreateBtn">Create note</button></div>`;
+        noteList.innerHTML = `<div class="empty-state-create"><p class="empty-state-text">No notes yet.</p><jot-button variant="primary" id="emptyCreateBtn">Create note</jot-button></div>`;
         document.getElementById("emptyCreateBtn").addEventListener("click", async () => {
           const payload = await api("/api/notes", { method: "POST" });
           window.location.href = `/notes/${payload.note.id}`;
@@ -224,7 +224,7 @@
                     <div class="note-row-snippet">${escapeHtml(note.snippet || "Empty note")}</div>
                     <div class="note-row-meta">${escapeHtml(formatDate(note.updatedAt))}</div>
                   </div>
-                  <button type="button" class="icon-action danger note-delete-btn" data-note-id="${escapeHtml(note.id)}" aria-label="Delete note" title="Delete note"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 4.5h9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6.2 4.5V3.4c0-.5.4-.9.9-.9h1.8c.5 0 .9.4.9.9v1.1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="m5 6.2.5 6.1c0 .4.4.7.8.7h3.4c.4 0 .8-.3.8-.7l.5-6.1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                  <jot-icon-button icon="trash" label="Delete note" class="note-delete-btn" data-note-id="${escapeHtml(note.id)}" danger></jot-icon-button>
                 </div>
               `,
             )
@@ -493,7 +493,7 @@
     }
 
     if (threadRail) threadRail.addEventListener("click", async (event) => {
-      const button = event.target.closest("button[data-action]");
+      const button = event.target.closest("[data-action]");
       const card = event.target.closest("[data-thread-id]");
 
       if (!button && card) {
@@ -502,7 +502,7 @@
         return;
       }
 
-      if (!button) {
+      if (!button || !button.dataset.action) {
         return;
       }
 
@@ -695,18 +695,18 @@
       <div class="app-root">
         <header class="topbar">
           <div class="topbar-left">
-            <button type="button" class="icon-button ghost" id="notesButton" aria-label="Back to notes">&lsaquo;</button>
+            <jot-icon-button icon="back" label="Back to notes" id="notesButton"></jot-icon-button>
             <input id="titleInput" class="title-input" type="text" spellcheck="false" value="untitled" />
             <span class="status-text" id="saveStatus"></span>
           </div>
           <div class="topbar-right">
-            <button type="button" class="icon-button ghost" id="previewFab" aria-label="Preview" title="Preview"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+            <jot-icon-button icon="preview" label="Preview" id="previewFab"></jot-icon-button>
             <div class="share-popover-wrap" id="sharePopoverWrap">
-              <button type="button" class="icon-button ghost" id="shareButton" aria-label="Share" title="Share"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="12" cy="4" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="4" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.8 7.1l4.4-2.2M5.8 8.9l4.4 2.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+              <jot-icon-button icon="share" label="Share" id="shareButton"></jot-icon-button>
               <div class="share-popover hidden" id="sharePopover"></div>
             </div>
-            <button type="button" class="icon-button ghost" id="logoutButton" aria-label="Logout" title="Logout"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10.5 11.5L14 8l-3.5-3.5M6 8h8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-            <button type="button" class="text-button theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
+            <jot-icon-button icon="logout" label="Logout" id="logoutButton"></jot-icon-button>
+            <button type="button" class="jot-btn-icon jot-btn-icon--md theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
           </div>
         </header>
         <main class="workspace">
@@ -715,10 +715,10 @@
             <textarea id="editorTextarea" class="editor-textarea" spellcheck="false"></textarea>
           </section>
           <section class="preview-stage" id="previewStage">
-            <button type="button" class="preview-close-button" id="previewCloseButton" aria-label="Close preview">&times;</button>
+            <jot-icon-button icon="close" label="Close preview" id="previewCloseButton" class="preview-close-btn"></jot-icon-button>
             <div class="preview-controls" id="previewControls">
-              <button type="button" class="preview-control-button" id="commentsButton">hide comments</button>
-              <button type="button" class="preview-control-button" id="resolvedButton">resolved</button>
+              <jot-button variant="ghost" size="sm" id="commentsButton">hide comments</jot-button>
+              <jot-button variant="ghost" size="sm" id="resolvedButton">resolved</jot-button>
             </div>
             <div class="preview-scroll" id="previewScroll">
               <div class="preview-canvas" id="previewCanvas">
@@ -738,8 +738,8 @@
 
   function renderPublicLayout(viewOnly) {
     const commentControls = viewOnly ? "" : `
-            <button type="button" class="preview-control-button" id="commentsButton">hide comments</button>
-            <button type="button" class="preview-control-button" id="resolvedButton">resolved</button>`;
+            <jot-button variant="ghost" size="sm" id="commentsButton">hide comments</jot-button>
+            <jot-button variant="ghost" size="sm" id="resolvedButton">resolved</jot-button>`;
     const commentElements = viewOnly ? "" : `
               <div class="highlight-layer" id="highlightLayer"></div>
               <button type="button" class="selection-bubble hidden" id="selectionBubble">+ Comment</button>
@@ -756,7 +756,7 @@
             </div>
           </div>
           <div class="topbar-right">
-            <button type="button" class="text-button theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
+            <button type="button" class="jot-btn-icon jot-btn-icon--md theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
           </div>
         </header>
         <main class="preview-stage public" id="previewStage">
@@ -787,8 +787,8 @@
             <span class="status-text" id="saveStatus"></span>
           </div>
           <div class="topbar-right">
-            <button type="button" class="icon-button ghost" id="previewFab" aria-label="Preview" title="Preview"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
-            <button type="button" class="text-button theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
+            <jot-icon-button icon="preview" label="Preview" id="previewFab"></jot-icon-button>
+            <button type="button" class="jot-btn-icon jot-btn-icon--md theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
           </div>
         </header>
         <main class="workspace">
@@ -797,10 +797,10 @@
             <textarea id="editorTextarea" class="editor-textarea" spellcheck="false"></textarea>
           </section>
           <section class="preview-stage" id="previewStage">
-            <button type="button" class="preview-close-button" id="previewCloseButton" aria-label="Close preview">&times;</button>
+            <jot-icon-button icon="close" label="Close preview" id="previewCloseButton" class="preview-close-btn"></jot-icon-button>
             <div class="preview-controls" id="previewControls">
-              <button type="button" class="preview-control-button" id="commentsButton">hide comments</button>
-              <button type="button" class="preview-control-button" id="resolvedButton">resolved</button>
+              <jot-button variant="ghost" size="sm" id="commentsButton">hide comments</jot-button>
+              <jot-button variant="ghost" size="sm" id="resolvedButton">resolved</jot-button>
             </div>
             <div class="preview-scroll" id="previewScroll">
               <div class="preview-canvas" id="previewCanvas">
@@ -846,7 +846,7 @@
           <option value="comment" ${access === "comment" ? "selected" : ""}>View & comment</option>
           <option value="edit" ${access === "edit" ? "selected" : ""}>Edit & comment</option>
         </select>
-        <button type="button" id="shareCopyBtn" class="${access === "none" ? "share-copy-disabled" : ""}" ${access === "none" ? "disabled" : ""}>copy link</button>
+        <jot-button variant="default" size="sm" id="shareCopyBtn" class="${access === "none" ? "share-copy-disabled" : ""}" ${access === "none" ? "disabled" : ""}>copy link</jot-button>
       </div>
     `;
     popover.classList.remove("hidden");
@@ -865,7 +865,7 @@
     });
     copyBtn.addEventListener("click", async () => {
       if (select.value === "none") return;
-      try { await navigator.clipboard.writeText(shareUrl); copyBtn.textContent = "copied!"; setTimeout(() => { copyBtn.textContent = "copy link"; }, 1500); } catch {}
+      try { await navigator.clipboard.writeText(shareUrl); setButtonLabel(copyBtn, "copied!"); setTimeout(() => { setButtonLabel(copyBtn, "copy link"); }, 1500); } catch {}
     });
     const closeHandler = (e) => { if (!popover.contains(e.target) && e.target.id !== "shareButton") { popover.classList.add("hidden"); document.removeEventListener("click", closeHandler); } };
     setTimeout(() => document.addEventListener("click", closeHandler), 0);
@@ -877,18 +877,18 @@
     });
   }
 
+  function setButtonLabel(el, text) {
+    if (!el) return;
+    const btn = el.querySelector("button") || el;
+    btn.textContent = text;
+  }
+
   function updateResolvedButton(button) {
-    if (!button) {
-      return;
-    }
-    button.textContent = state.showResolved ? "hide resolved" : "resolved";
+    setButtonLabel(button, state.showResolved ? "hide resolved" : "resolved");
   }
 
   function updateCommentsButton(button) {
-    if (!button) {
-      return;
-    }
-    button.textContent = state.showComments ? "hide comments" : "comments";
+    setButtonLabel(button, state.showComments ? "hide comments" : "comments");
   }
 
   function scheduleLayout(refs) {
@@ -992,8 +992,8 @@
         ${flat.map((item) => renderFlatMessage(thread, item.message, item.depth)).join("")}
       </div>
       ${(thread.canResolve || thread.canDeleteThread) ? `<div class="thread-footer">
-        ${thread.canResolve ? `<button type="button" class="text-button thread-footer-button" data-action="${thread.resolved ? "reopen" : "resolve"}" data-thread-id="${escapeHtml(thread.id)}">${thread.resolved ? "reopen" : "resolve"}</button>` : ""}
-        ${thread.canDeleteThread ? `<button type="button" class="text-button danger thread-footer-button" data-action="delete-thread" data-thread-id="${escapeHtml(thread.id)}">delete</button>` : ""}
+        ${thread.canResolve ? `<jot-button variant="link" size="sm" data-action="${thread.resolved ? "reopen" : "resolve"}" data-thread-id="${escapeHtml(thread.id)}">${thread.resolved ? "reopen" : "resolve"}</jot-button>` : ""}
+        ${thread.canDeleteThread ? `<jot-button variant="danger" size="sm" data-action="delete-thread" data-thread-id="${escapeHtml(thread.id)}">delete</jot-button>` : ""}
       </div>` : ""}
     `;
   }
@@ -1069,27 +1069,11 @@
     return sortNodes(roots);
   }
 
-  function renderIconButton(action, threadId, messageId, label, danger = false) {
-    return `<button type="button" class="icon-action${danger ? " danger" : ""}" data-action="${escapeHtml(action)}" data-thread-id="${escapeHtml(threadId)}"${messageId ? ` data-message-id="${escapeHtml(messageId)}"` : ""} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${iconSvg(action)}</button>`;
-  }
+  const ACTION_ICON_MAP = { reply: "reply", "edit-message": "edit", "delete-message": "trash", "delete-thread": "trash" };
 
-  function iconSvg(action) {
-    if (action === "reply") {
-      return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 4.2 2.5 8l3.7 3.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 8h5.5c2.7 0 4.5 1.2 4.5 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    }
-    if (action === "edit-message") {
-      return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 11.8 3.6 9l5.9-5.9 2.4 2.4L6 11.4 3 11.8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="m8.8 3.8 2.4 2.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
-    }
-    if (action === "delete-message" || action === "delete-thread") {
-      return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 4.5h9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M6.2 4.5V3.4c0-.5.4-.9.9-.9h1.8c.5 0 .9.4.9.9v1.1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="m5 6.2.5 6.1c0 .4.4.7.8.7h3.4c.4 0 .8-.3.8-.7l.5-6.1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    }
-    if (action === "resolve") {
-      return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.3 2.6 2.6 6.4-6.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    }
-    if (action === "reopen") {
-      return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.1 6.1V3.3M4.1 3.3H6.9M4.1 3.3 7 6.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8a4.9 4.9 0 1 1-1.3-3.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    }
-    return '';
+  function renderIconButton(action, threadId, messageId, label, danger = false) {
+    const icon = ACTION_ICON_MAP[action] || action;
+    return `<jot-icon-button icon="${escapeHtml(icon)}" label="${escapeHtml(label)}" size="sm" data-action="${escapeHtml(action)}" data-thread-id="${escapeHtml(threadId)}"${messageId ? ` data-message-id="${escapeHtml(messageId)}"` : ""}${danger ? " danger" : ""}></jot-icon-button>`;
   }
 
   function activateThread(threadId, refs, scrollIntoView) {
@@ -1297,8 +1281,8 @@
             .join("")}
           <div class="inline-error hidden" id="modalError"></div>
           <div class="modal-actions">
-            ${options.cancelLabel ? `<button type="button" class="ghost" id="modalCancel">${escapeHtml(options.cancelLabel)}</button>` : ""}
-            <button type="submit" class="primary">${escapeHtml(options.submitLabel)}</button>
+            ${options.cancelLabel ? `<jot-button variant="ghost" id="modalCancel">${escapeHtml(options.cancelLabel)}</jot-button>` : ""}
+            <jot-button variant="primary" submit>${escapeHtml(options.submitLabel)}</jot-button>
           </div>
         </form>
       </div>
@@ -1427,7 +1411,7 @@
     refs.modalBackdrop.classList.remove("hidden");
     refs.modalBackdrop.innerHTML = `
       <div class="modal thread-modal" role="dialog" aria-modal="true">
-        <button type="button" class="thread-modal-close" id="threadDialogClose" aria-label="Close">×</button>
+        <jot-icon-button icon="close" label="Close" id="threadDialogClose" class="thread-modal-close-wrap"></jot-icon-button>
         <div class="thread-modal-body">${renderThreadCard(thread)}</div>
       </div>
     `;
@@ -1445,8 +1429,8 @@
       }
     });
     refs.modalBackdrop.querySelector(".thread-modal-body").addEventListener("click", async (event) => {
-      const button = event.target.closest("button[data-action]");
-      if (!button) {
+      const button = event.target.closest("[data-action]");
+      if (!button || !button.dataset.action) {
         return;
       }
       const action = button.dataset.action;
