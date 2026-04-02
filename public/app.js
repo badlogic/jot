@@ -14,6 +14,79 @@
 
   const themeIcon = window.__themeIcon || ((t) => t === "dark" ? "☀" : "☾");
 
+  let mermaidIdCounter = 0;
+  let mermaidCache = [];
+  const svgBtn = (action, d) => `<button type="button" data-action="${action}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg></button>`;
+  const mermaidToolbarHtml = ''
+    + '<span></span>' + svgBtn('up', '<path d="M4 10l4-4 4 4"/>') + svgBtn('zoom-in', '<circle cx="8" cy="8" r="5.5"/><path d="M8 5.5v5M5.5 8h5"/>')
+    + svgBtn('left', '<path d="M10 4l-4 4 4 4"/>') + svgBtn('reset', '<path d="M3.5 3v4h4"/><path d="M3.5 7a5.5 5.5 0 1 1 1 3.5"/>') + svgBtn('right', '<path d="M6 4l4 4-4 4"/>')
+    + '<span></span>' + svgBtn('down', '<path d="M4 6l4 4 4-4"/>') + svgBtn('zoom-out', '<circle cx="8" cy="8" r="5.5"/><path d="M5.5 8h5"/>');
+
+  async function renderMermaid(container) {
+    const m = window.__mermaid;
+    if (!m || !container) return;
+    const freshNodes = Array.from(container.querySelectorAll("pre.mermaid")).filter((node) => node.textContent.trim());
+
+    // Reuse cached wrappers for unchanged diagrams, preserving pan/zoom state
+    const newCache = [];
+    const toRender = [];
+    freshNodes.forEach((node, i) => {
+      const src = node.textContent;
+      if (mermaidCache[i] && mermaidCache[i].src === src) {
+        node.replaceWith(mermaidCache[i].wrap);
+        newCache[i] = mermaidCache[i];
+      } else {
+        node.setAttribute("data-original-code", src);
+        node.removeAttribute("data-processed");
+        node.id = "mermaid-" + (mermaidIdCounter++) + "-" + i;
+        toRender.push({ node, index: i });
+      }
+    });
+
+    if (toRender.length > 0) {
+      const nodes = toRender.map((t) => t.node);
+      try { await m.run({ nodes, suppressErrors: true }); } catch {}
+      toRender.forEach(({ node, index }) => {
+        const wrap = document.createElement("div");
+        wrap.className = "mermaid-wrap";
+        const viewport = document.createElement("div");
+        viewport.className = "mermaid-viewport";
+        node.replaceWith(wrap);
+        viewport.appendChild(node);
+        wrap.appendChild(viewport);
+        const bar = document.createElement("div");
+        bar.className = "mermaid-toolbar";
+        bar.innerHTML = mermaidToolbarHtml;
+        wrap.appendChild(bar);
+        let scale = 1, tx = 0, ty = 0;
+        const step = 50;
+        function applyTransform() { node.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; }
+        bar.addEventListener("click", (e) => {
+          const btn = e.target.closest("[data-action]");
+          if (!btn) return;
+          const action = btn.dataset.action;
+          if (action === "zoom-in") { scale = Math.min(4, scale + 0.25); }
+          else if (action === "zoom-out") { scale = Math.max(0.25, scale - 0.25); }
+          else if (action === "up") { ty += step; }
+          else if (action === "down") { ty -= step; }
+          else if (action === "left") { tx += step; }
+          else if (action === "right") { tx -= step; }
+          else if (action === "reset") { scale = 1; tx = 0; ty = 0; }
+          applyTransform();
+        });
+        newCache[index] = { src: node.getAttribute("data-original-code"), wrap };
+      });
+    }
+    mermaidCache = newCache;
+  }
+  window.__renderMermaid = renderMermaid;
+
+  function setPreviewHtml(refs, html) {
+    if (!refs.previewContent) return;
+    refs.previewContent.innerHTML = html;
+    renderMermaid(refs.previewContent);
+  }
+
   const shareAccess = document.body.dataset.shareAccess || "";
   const ACTION_ICON_MAP = { reply: "reply", "edit-message": "edit", "delete-message": "trash", "delete-thread": "trash" };
 
@@ -604,7 +677,7 @@
       if (publicMode) {
         state.note.markdown = payload.note.markdown;
         if (refsArg.previewContent) {
-          refsArg.previewContent.innerHTML = payload.note.renderedHtml || "";
+          setPreviewHtml(refsArg, payload.note.renderedHtml || "");
         }
         if (refsArg.topbarTitle) {
           refsArg.topbarTitle.textContent = payload.note.title || "untitled";
@@ -624,9 +697,7 @@
           if (refsArg.titleInput && refsArg.titleInput.value !== payload.note.title) {
             refsArg.titleInput.value = payload.note.title;
           }
-          if (refsArg.previewContent) {
-            refsArg.previewContent.innerHTML = payload.note.renderedHtml || "";
-          }
+          setPreviewHtml(refsArg, payload.note.renderedHtml || "");
         }
       }
 
@@ -672,9 +743,7 @@
       if (refsArg.editorTextarea) {
         refsArg.editorTextarea.value = payload.note.markdown || "";
       }
-      if (refsArg.previewContent) {
-        refsArg.previewContent.innerHTML = payload.note.renderedHtml || "";
-      }
+      setPreviewHtml(refsArg, payload.note.renderedHtml || "");
       if (refsArg.commenterLabel) {
         refsArg.commenterLabel.textContent = payload.viewer.commenterName ? payload.viewer.commenterName : "anonymous";
       }
@@ -694,9 +763,7 @@
           method: "POST",
           body: { markdown: state.note?.markdown || "" },
         });
-        if (refsArg.previewContent) {
-          refsArg.previewContent.innerHTML = payload.html;
-        }
+        setPreviewHtml(refsArg, payload.html);
         syncThreadLayout(refsArg);
       }, 150);
     }
@@ -1731,7 +1798,9 @@
   }
 
   function collectTextNodes(root) {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) { return node.parentElement?.closest(".mermaid-wrap") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; },
+    });
     const segments = [];
     let node;
     let offset = 0;

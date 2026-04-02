@@ -19,6 +19,18 @@
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].innerHTML = window.__themeIcon(next);
     }
+    if (window.__mermaid) {
+      window.__mermaid.initialize({ startOnLoad: false, theme: next === "light" ? "default" : "dark" });
+      var container = document.getElementById("previewContent");
+      if (container) {
+        container.querySelectorAll(".mermaid-wrap").forEach(function(wrap) {
+          var pre = wrap.querySelector("pre.mermaid");
+          if (pre) { pre.textContent = pre.getAttribute("data-original-code") || ""; wrap.replaceWith(pre); }
+          else { wrap.remove(); }
+        });
+        if (window.__renderMermaid) window.__renderMermaid(container);
+      }
+    }
   };
 
   document.addEventListener("click", function(event) {

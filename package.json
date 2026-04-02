@@ -20,6 +20,7 @@
     "express": "^5.1.0",
     "highlight.js": "^11.11.1",
     "marked": "^16.4.1",
+    "mermaid": "^11.14.0",
     "sanitize-html": "^2.17.0",
     "ws": "^8.20.0"
   },

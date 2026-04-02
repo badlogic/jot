@@ -317,6 +317,15 @@ input:focus, textarea:focus { border-color: var(--muted); }
 .markdown-body a { color: var(--blue); }
 .markdown-body img { max-width: 100%; height: auto; }
 
+/* Mermaid diagrams */
+.mermaid-wrap { position: relative; margin: 0 0 1rem; overflow: hidden; border: 1px solid var(--code-border); border-radius: 14px; background: var(--code-bg); user-select: none; }
+.mermaid-viewport { overflow: hidden; }
+.mermaid-viewport pre.mermaid { margin: 0; border: none; padding: 1.5rem 1rem 1rem; display: flex; justify-content: center; transition: transform 0.15s ease; transform-origin: 0 0; }
+.mermaid-toolbar { position: absolute; bottom: 0.5rem; right: 0.5rem; display: grid; grid-template-columns: repeat(3, 32px); grid-template-rows: repeat(3, 32px); gap: 3px; z-index: 1; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.mermaid-wrap:hover .mermaid-toolbar { opacity: 1; pointer-events: auto; }
+.mermaid-toolbar button { background: var(--bg-3); color: var(--text); border: 1px solid var(--code-border); border-radius: 8px; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.mermaid-toolbar button:hover { background: var(--line); }
+
 .hljs { color: var(--hljs-text); background: transparent; }
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-literal { color: var(--hljs-keyword); }
 .hljs-string, .hljs-title, .hljs-section, .hljs-attribute { color: var(--hljs-string); }

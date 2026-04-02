@@ -142,6 +142,9 @@ const notes = new Map<string, NoteRecord>();
 const codeRenderer = new marked.Renderer();
 codeRenderer.code = ({ text, lang }: Tokens.Code) => {
   const language = (lang || "").trim().split(/\s+/)[0];
+  if (language === "mermaid") {
+    return `<pre class="mermaid">${escapeHtml(text)}</pre>`;
+  }
   const validLanguage = language && hljs.getLanguage(language) ? language : null;
   const highlighted = validLanguage
     ? hljs.highlight(text, { language: validLanguage }).value
@@ -164,6 +167,7 @@ app.set("trust proxy", true);
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 app.use("/static", express.static(publicDir));
+app.use("/static/mermaid", express.static(path.join(path.resolve(__dirname, ".."), "node_modules", "mermaid", "dist")));
 
 app.get("/health", (_req, res) => {
   res.type("text/plain").send("ok");
@@ -1724,6 +1728,7 @@ function renderMarkdown(markdown: string) {
     allowedClasses: {
       code: ["hljs", /^language-/],
       span: [/^hljs.*/],
+      pre: ["mermaid"],
     },
     allowedSchemes: ["http", "https", "mailto"],
     transformTags: {
@@ -2175,7 +2180,17 @@ function renderAppShell(
     <div id="app"></div>
     <script>window.__OWNER_TOKEN_KEY__ = ${JSON.stringify(ownerLocalStorageTokenKey)};</script>
     <script>document.querySelectorAll('.theme-toggle').forEach(function(b){b.innerHTML=window.__themeIcon(document.documentElement.getAttribute('data-theme')||'dark')});</script>
-    <script src="/static/components.js"></script>
+    <script src="/static/components.js"></script>${
+      page !== "list"
+        ? `
+    <script type="module">
+      import mermaid from "/static/mermaid/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: false, theme: document.documentElement.getAttribute("data-theme") === "light" ? "default" : "dark" });
+      window.__mermaid = mermaid;
+      if (window.__renderMermaid) { var c = document.getElementById("previewContent"); if (c) window.__renderMermaid(c); }
+    </script>`
+        : ""
+    }
     <script src="/static/app.js" defer></script>
   </body>
 </html>`;
