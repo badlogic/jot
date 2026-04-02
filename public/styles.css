@@ -498,7 +498,7 @@ input:focus, textarea:focus { border-color: var(--muted); }
 
 /* --- Narrow / mobile --- */
 @media (max-width: 980px) {
-  .workspace { grid-template-columns: 1fr; }
+  .workspace { grid-template-columns: 1fr !important; }
   .resize-handle { display: none; }
   .editor-pane { border-right: 0; border-bottom: none; }
 
