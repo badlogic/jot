@@ -256,12 +256,15 @@ input:focus, textarea:focus { border-color: var(--muted); }
 
 .workspace {
   display: grid; grid-template-columns: 1fr 1fr;
-  min-height: calc(100vh - var(--toolbar-height)); overflow: hidden;
+  height: calc(100vh - var(--toolbar-height)); overflow: hidden;
 }
-.editor-pane { border-right: 1px solid var(--line); background: var(--editor-bg); overflow: hidden; }
+.editor-pane {
+  border-right: 1px solid var(--line); background: var(--editor-bg); overflow: hidden;
+  display: flex; flex-direction: column; position: relative;
+}
 
 .editor-textarea {
-  width: 100%; min-height: calc(100vh - var(--toolbar-height));
+  width: 100%; flex: 1; min-height: 0;
   padding: 2rem 2.25rem; border: 0; border-radius: 0; resize: none;
   background: transparent; color: var(--text);
   font-size: 0.88rem; line-height: 1.58;
@@ -271,7 +274,7 @@ input:focus, textarea:focus { border-color: var(--muted); }
 .editor-textarea:focus { border: 0; }
 
 .preview-stage {
-  min-height: calc(100vh - var(--toolbar-height));
+  height: 100%;
   background: var(--input-bg); overflow: hidden; position: relative;
 }
 
@@ -281,7 +284,7 @@ input:focus, textarea:focus { border-color: var(--muted); }
 }
 .preview-controls .jot-btn { backdrop-filter: blur(6px); }
 
-.preview-scroll { overflow-y: auto; overflow-x: hidden; height: calc(100vh - var(--toolbar-height)); }
+.preview-scroll { overflow-y: auto; overflow-x: hidden; height: 100%; }
 .preview-canvas { position: relative; min-height: 100%; }
 .preview-content { max-width: 880px; min-height: 100%; margin: 0 auto; padding: 2rem 1.75rem 8rem 2.5rem; }
 .preview-stage.public .preview-content { max-width: 980px; }
@@ -494,7 +497,7 @@ input:focus, textarea:focus { border-color: var(--muted); }
   #previewFab { display: inline-flex !important; }
 
   /* Editor takes full height */
-  .editor-textarea { min-height: calc(100vh - var(--toolbar-height)); }
+  .editor-textarea { min-height: 0; flex: 1; }
 
   .preview-scroll, .preview-stage { height: 100vh; min-height: 100vh; }
   .preview-scroll { height: 100%; }
