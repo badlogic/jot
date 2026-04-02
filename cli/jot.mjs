@@ -35,10 +35,12 @@ async function request(instance, method, endpoint, body) {
   const url = `${instance.baseUrl.replace(/\/$/, "")}${endpoint}`;
   const options = {
     method,
-    headers: {
-      Authorization: `Bearer ${instance.token}`,
-    },
+    headers: {},
   };
+
+  if (instance.token) {
+    options.headers.Authorization = `Bearer ${instance.token}`;
+  }
 
   if (body !== undefined) {
     options.headers["Content-Type"] = "application/json";
@@ -56,6 +58,10 @@ async function request(instance, method, endpoint, body) {
   return payload;
 }
 
+function isShareInstance(instance) {
+  return Boolean(instance.shareId && !instance.token);
+}
+
 const args = process.argv.slice(2);
 const command = args[0];
 
@@ -64,18 +70,52 @@ if (!command) {
   process.exit(0);
 }
 
+if (command === "serve") {
+  const portArg = args.find((a) => a.startsWith("--port="));
+  const dataArg = args.find((a) => a.startsWith("--data="));
+  const cliDir = path.dirname(new URL(import.meta.url).pathname);
+  const serverPath = path.join(cliDir, "..", "dist", "server.js");
+  if (!fs.existsSync(serverPath)) {
+    console.error(`Server not found at ${serverPath}. Run 'npm run build' first.`);
+    process.exit(1);
+  }
+  const serverArgs = [serverPath];
+  if (portArg) serverArgs.push(portArg);
+  if (dataArg) serverArgs.push(dataArg);
+  const { execFileSync } = await import("node:child_process");
+  try {
+    execFileSync(process.execPath, serverArgs, { stdio: "inherit" });
+  } catch (e) {
+    process.exit(e.status || 1);
+  }
+  process.exit(0);
+}
+
 if (command === "register") {
-  const [, name, baseUrl, token] = args;
-  if (!name || !baseUrl || !token) {
+  const [, name, urlOrBase, token] = args;
+  if (!name || !urlOrBase) {
     console.error("Usage: jot register <name> <baseUrl> <token>");
+    console.error("       jot register <name> <shareUrl>");
     process.exit(1);
   }
 
   const config = loadConfig();
   config.instances = config.instances.filter((i) => i.name !== name);
-  config.instances.push({ name, baseUrl, token });
-  saveConfig(config);
-  console.log(`Registered instance "${name}" at ${baseUrl}`);
+
+  const shareMatch = urlOrBase.match(/^(https?:\/\/.+)\/s\/([a-z0-9]+)$/i);
+  if (shareMatch) {
+    config.instances.push({ name, baseUrl: shareMatch[1], shareId: shareMatch[2] });
+    saveConfig(config);
+    console.log(`Registered shared instance "${name}" at ${shareMatch[1]}`);
+  } else {
+    if (!token) {
+      console.error("Usage: jot register <name> <baseUrl> <token>");
+      process.exit(1);
+    }
+    config.instances.push({ name, baseUrl: urlOrBase, token });
+    saveConfig(config);
+    console.log(`Registered instance "${name}" at ${urlOrBase}`);
+  }
   process.exit(0);
 }
 
@@ -121,6 +161,81 @@ if (!subCommand) {
 }
 
 const instance = getInstance(instanceName);
+
+if (isShareInstance(instance)) {
+  const sid = instance.shareId;
+  const nameArg = args.find((a) => a.startsWith("--name="));
+  const agentName = nameArg ? nameArg.split("=").slice(1).join("=") : "Agent";
+
+  switch (subCommand) {
+    case "read": {
+      const payload = await request(instance, "GET", `/api/share/${sid}/note`);
+      const note = payload.note;
+      console.log(`# ${note.title}`);
+      console.log(`# id: ${note.id}`);
+      console.log(`# updated: ${note.updatedAt}`);
+      console.log(`# access: ${note.shareAccess}`);
+      console.log();
+      console.log(note.markdown);
+
+      if (payload.threads && payload.threads.length > 0) {
+        console.log();
+        console.log("--- Comments ---");
+        for (const thread of payload.threads) {
+          const anchor = thread.anchor?.quote ? `"${thread.anchor.quote.slice(0, 60)}"` : "(no anchor)";
+          console.log();
+          console.log(`Thread ${thread.id} on ${anchor}${thread.resolved ? " [resolved]" : ""}`);
+          for (const msg of thread.messages) {
+            console.log(`  ${msg.authorName} (${msg.updatedAt}): ${msg.body}`);
+          }
+        }
+      }
+      break;
+    }
+
+    case "edit": {
+      const editsJson = args[2];
+      if (!editsJson) {
+        console.error("Usage: jot <instance> edit '<json edits>'");
+        process.exit(1);
+      }
+      let edits;
+      try { edits = JSON.parse(editsJson); } catch { console.error("Invalid JSON."); process.exit(1); }
+      const payload = await request(instance, "POST", `/api/share/${sid}/edit`, { edits });
+      console.log(`Saved at ${payload.savedAt}`);
+      break;
+    }
+
+    case "comment": {
+      const quote = args[2];
+      const body = args.slice(3).join(" ");
+      if (!quote || !body) {
+        console.error('Usage: jot <instance> comment <quote> <body>');
+        process.exit(1);
+      }
+      const payload = await request(instance, "POST", `/api/share/${sid}/threads`, { anchor: { quote, prefix: "", suffix: "", start: 0, end: 0 }, body, name: agentName });
+      console.log("Comment added");
+      break;
+    }
+
+    case "reply": {
+      const threadId = args[2];
+      const body = args.slice(3).join(" ");
+      if (!threadId || !body) {
+        console.error("Usage: jot <instance> reply <threadId> <body>");
+        process.exit(1);
+      }
+      await request(instance, "POST", `/api/share/${sid}/threads/${threadId}/replies`, { body, name: agentName });
+      console.log("Reply added");
+      break;
+    }
+
+    default:
+      console.error(`Unknown command for shared instance: ${subCommand}`);
+      console.error("Available: read, edit, comment, reply");
+      process.exit(1);
+  }
+} else {
 
 switch (subCommand) {
   case "list": {
@@ -205,6 +320,33 @@ switch (subCommand) {
     break;
   }
 
+  case "comment": {
+    const noteId = args[2];
+    const quote = args[3];
+    const body = args.slice(4).join(" ");
+    if (!noteId || !quote || !body) {
+      console.error("Usage: jot <instance> comment <id> <quote> <body>");
+      console.error('Example: jot myserver comment abc123 "some text" "my comment"');
+      process.exit(1);
+    }
+    const payload = await request(instance, "POST", `/api/notes/${noteId}/threads`, { quote, body });
+    console.log(`Comment added (thread ${payload.thread.id})`);
+    break;
+  }
+
+  case "reply": {
+    const noteId = args[2];
+    const threadId = args[3];
+    const body = args.slice(4).join(" ");
+    if (!noteId || !threadId || !body) {
+      console.error("Usage: jot <instance> reply <noteId> <threadId> <body>");
+      process.exit(1);
+    }
+    await request(instance, "POST", `/api/notes/${noteId}/threads/${threadId}/replies`, { body });
+    console.log("Reply added");
+    break;
+  }
+
   case "edit": {
     const noteId = args[2];
     const editsJson = args[3];
@@ -274,21 +416,36 @@ switch (subCommand) {
     process.exit(1);
 }
 
+} // end owner mode
+
 function printUsage() {
   console.log(`Usage: jot <command> [args...]
 
+Server:
+  jot serve [--port=N] [--data=path]      Run the jot server
+
 Instance management:
-  jot register <name> <baseUrl> <token>   Register a jot instance
+  jot register <name> <baseUrl> <token>   Register with API key (owner)
+  jot register <name> <shareUrl>          Register with share link
   jot unregister <name>                   Remove a registered instance
   jot instances                           List registered instances
 
-Note operations:
+Owner commands:
   jot <instance> list                     List all notes
   jot <instance> search <query>           Search notes
   jot <instance> read <id>                Read a note with comments
   jot <instance> create [title]           Create a new note
+  jot <instance> comment <id> <quote> <b> Comment on quoted text
+  jot <instance> reply <id> <threadId> <b> Reply to a comment thread
   jot <instance> edit <id> '<edits>'      Apply edits (JSON array of {oldText, newText})
   jot <instance> update <id> title <val>  Update note title
   jot <instance> update <id> markdown <v> Replace full markdown
-  jot <instance> delete <id>              Delete a note`);
+  jot <instance> delete <id>              Delete a note
+
+Shared note commands:
+  jot <instance> read                     Read the shared note
+  jot <instance> edit '<edits>'           Edit (if edit access)
+  jot <instance> comment <quote> <body>   Comment on text
+  jot <instance> reply <threadId> <body>  Reply to a thread
+  Use --name="Name" to set display name for comments`);
 }

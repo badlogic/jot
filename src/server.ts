@@ -130,7 +130,7 @@ const port = Number(cliArg("port") || process.env.PORT || 3210);
 const dataDir = cliArg("data") || process.env.DATA_DIR || path.join(process.cwd(), "data");
 const notesDir = path.join(dataDir, "notes");
 const authFilePath = path.join(dataDir, "auth.json");
-const publicDir = path.join(process.cwd(), "public");
+const publicDir = path.join(path.resolve(__dirname, ".."), "public");
 const ownerSessionCookieName = "md_owner_session";
 const ownerLocalStorageTokenKey = "md_owner_token";
 const commenterIdCookieName = "md_commenter_id";
@@ -400,6 +400,107 @@ app.post("/api/notes/:id/edit", requireOwnerApi, (req, res) => {
   res.json({ ok: true, savedAt: note.updatedAt });
 });
 
+app.post("/api/notes/:id/threads", requireOwnerApi, (req, res) => {
+  const note = notes.get(String(req.params.id));
+  if (!note) {
+    res.status(404).json({ ok: false, error: "Note not found." });
+    return;
+  }
+
+  const quote = String(req.body.quote || "");
+  const body = normalizeCommentBody(String(req.body.body || ""));
+  if (!quote || !body) {
+    res.status(400).json({ ok: false, error: "quote and body are required." });
+    return;
+  }
+
+  const start = note.markdown.indexOf(quote);
+  if (start === -1) {
+    res.status(400).json({ ok: false, error: "Quoted text not found in note." });
+    return;
+  }
+
+  const prefix = note.markdown.slice(Math.max(0, start - 32), start);
+  const end = start + quote.length;
+  const suffix = note.markdown.slice(end, end + 32);
+
+  const bearer = getBearerToken(req);
+  const apiKeyLabel = bearer ? getApiKeyLabel(bearer) : null;
+  const authorName = apiKeyLabel || "Owner";
+
+  const anchor: CommentAnchor = { quote, prefix, suffix, start, end };
+  const thread: CommentThread = {
+    id: createId(10),
+    resolved: false,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    anchor,
+    messages: [
+      {
+        id: createId(10),
+        parentId: null,
+        authorId: "__owner__",
+        authorName,
+        body,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+    ],
+  };
+
+  note.threads.push(thread);
+  note.updatedAt = nowIso();
+  persistNote(note);
+  broadcastThreadsUpdated(note);
+  res.json({ ok: true, thread: { id: thread.id } });
+});
+
+app.post("/api/notes/:id/threads/:threadId/replies", requireOwnerApi, (req, res) => {
+  const note = notes.get(String(req.params.id));
+  if (!note) {
+    res.status(404).json({ ok: false, error: "Note not found." });
+    return;
+  }
+
+  const thread = note.threads.find((t) => t.id === String(req.params.threadId));
+  if (!thread) {
+    res.status(404).json({ ok: false, error: "Thread not found." });
+    return;
+  }
+
+  const body = normalizeCommentBody(String(req.body.body || ""));
+  const parentMessageId = String(req.body.parentMessageId || thread.messages[0]?.id || "");
+  if (!body) {
+    res.status(400).json({ ok: false, error: "body is required." });
+    return;
+  }
+
+  if (!thread.messages.some((m) => m.id === parentMessageId)) {
+    res.status(400).json({ ok: false, error: "Parent message not found." });
+    return;
+  }
+
+  const bearer = getBearerToken(req);
+  const apiKeyLabel = bearer ? getApiKeyLabel(bearer) : null;
+  const authorName = apiKeyLabel || "Owner";
+  const timestamp = nowIso();
+
+  thread.messages.push({
+    id: createId(10),
+    parentId: parentMessageId,
+    authorId: "__owner__",
+    authorName,
+    body,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+  thread.updatedAt = timestamp;
+  note.updatedAt = timestamp;
+  persistNote(note);
+  broadcastThreadsUpdated(note);
+  res.json({ ok: true });
+});
+
 app.delete("/api/notes/:id", requireOwnerApi, (req, res) => {
   const id = String(req.params.id);
   const note = notes.get(id);
@@ -537,6 +638,103 @@ app.post("/api/render", requireOwnerApi, (req, res) => {
   res.json({ ok: true, html: renderMarkdown(markdown) });
 });
 
+app.post("/api/share/:shareId/edit", (req, res) => {
+  const note = requireShareAccess(req, res, "edit");
+  if (!note) return;
+
+  const edits = req.body.edits;
+  if (!Array.isArray(edits) || edits.length === 0) {
+    res.status(400).json({ ok: false, error: "edits must be a non-empty array of {oldText, newText}." });
+    return;
+  }
+
+  let workingCollab = note.collab;
+  let markdown = note.markdown;
+  let senderCounter = 0;
+  const errors: string[] = [];
+  const idListUpdates: ServerMutationMessage["idListUpdates"] = [];
+
+  for (let i = 0; i < edits.length; i++) {
+    const edit = edits[i];
+    const oldText = String(edit?.oldText || "");
+    const newText = String(edit?.newText || "");
+
+    if (!oldText) {
+      errors.push(`Edit ${i}: oldText is empty.`);
+      continue;
+    }
+
+    const firstIndex = markdown.indexOf(oldText);
+    if (firstIndex === -1) {
+      errors.push(`Edit ${i}: oldText not found.`);
+      continue;
+    }
+
+    const secondIndex = markdown.indexOf(oldText, firstIndex + 1);
+    if (secondIndex !== -1) {
+      errors.push(`Edit ${i}: oldText is ambiguous (found ${countOccurrences(markdown, oldText)} times).`);
+      continue;
+    }
+
+    let nextClientCounter = senderCounter + 1;
+    const mutations: ClientMutation[] = [];
+
+    if (oldText.length > 0) {
+      mutations.push({
+        name: "delete",
+        clientCounter: nextClientCounter++,
+        args: {
+          startId: idAtIndex(workingCollab, firstIndex),
+          endId: idAtIndex(workingCollab, firstIndex + oldText.length - 1),
+          contentLength: oldText.length,
+        },
+      });
+    }
+
+    if (newText.length > 0) {
+      mutations.push({
+        name: "insert",
+        clientCounter: nextClientCounter++,
+        args: {
+          before: firstIndex > 0 ? idBeforeIndex(workingCollab, firstIndex) : null,
+          id: { bunchId: crypto.randomUUID(), counter: 0 },
+          content: newText,
+          isInWord: false,
+        },
+      });
+    }
+
+    const result = applyClientMutations(workingCollab, mutations);
+    workingCollab = result.state;
+    markdown = result.markdown;
+    idListUpdates.push(...result.idListUpdates);
+    senderCounter = mutations.at(-1)?.clientCounter || senderCounter;
+  }
+
+  if (errors.length > 0) {
+    res.status(400).json({ ok: false, errors });
+    return;
+  }
+
+  note.collab = workingCollab;
+  note.markdown = markdown;
+  note.updatedAt = nowIso();
+  persistNote(note, false);
+
+  if (idListUpdates.length > 0) {
+    broadcastEditorMutation(note, {
+      type: "mutation",
+      senderId: "__api__",
+      senderCounter,
+      serverCounter: note.collab.serverCounter,
+      markdown: note.markdown,
+      idListUpdates,
+    });
+  }
+  broadcastNoteUpdate(note);
+  res.json({ ok: true, savedAt: note.updatedAt });
+});
+
 app.post("/api/share/:shareId/render", (req, res) => {
   const note = requireShareAccess(req, res, "view");
   if (!note) return;
@@ -549,6 +747,23 @@ app.get("/api/share/:shareId", (req, res) => {
   if (!note) return;
 
   res.json({ ok: true, ...serializeNoteForClient(note, req) });
+});
+
+app.get("/api/share/:shareId/note", (req, res) => {
+  const note = requireShareAccess(req, res, "view");
+  if (!note) return;
+
+  res.json({
+    ok: true,
+    note: {
+      id: note.id,
+      title: note.title,
+      markdown: note.markdown,
+      shareAccess: note.shareAccess,
+      updatedAt: note.updatedAt,
+    },
+    threads: serializeThreads(note, req),
+  });
 });
 
 app.post("/api/share/:shareId/identity", (req, res) => {
@@ -1687,6 +1902,21 @@ function verifyApiKey(key: string) {
   return false;
 }
 
+function getApiKeyLabel(key: string): string | null {
+  const auth = loadAuthData();
+  if (!auth || !auth.apiKeys) {
+    return null;
+  }
+
+  for (const stored of auth.apiKeys) {
+    if (secureEqualsHex(hashSecret(key, stored.keySalt), stored.keyHash)) {
+      return stored.label;
+    }
+  }
+
+  return null;
+}
+
 function createApiKey(label: string) {
   const auth = loadAuthData();
   if (!auth) {
@@ -1770,12 +2000,13 @@ function ensureCommentAuthor(req: Request, res: Response) {
   }
 
   const commenter = getCommenterIdentity(req);
-  if (!commenter.name) {
+  const name = commenter.name || normalizeCommenterName(String(req.body?.name || ""));
+  if (!name) {
     return null;
   }
 
   const commenterId = commenter.id || getOrCreateCommenterId(req, res);
-  return { authorId: commenterId, authorName: commenter.name };
+  return { authorId: commenterId, authorName: name };
 }
 
 function canManageMessage(req: Request, message: CommentMessage) {

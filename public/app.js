@@ -15,6 +15,7 @@
   const themeIcon = window.__themeIcon || ((t) => t === "dark" ? "☀" : "☾");
 
   const shareAccess = document.body.dataset.shareAccess || "";
+  const ACTION_ICON_MAP = { reply: "reply", "edit-message": "edit", "delete-message": "trash", "delete-thread": "trash" };
 
   const state = {
     page,
@@ -304,6 +305,11 @@
       });
     }
 
+    const agentButton = document.getElementById("agentButton");
+    if (agentButton) {
+      agentButton.addEventListener("click", () => openAgentModal(refs));
+    }
+
     if (resolvedButton) {
       resolvedButton.addEventListener("click", () => {
         state.showResolved = !state.showResolved;
@@ -316,6 +322,7 @@
       commentsButton.addEventListener("click", () => {
         state.showComments = !state.showComments;
         updateCommentsButton(commentsButton);
+        updateResolvedButton(resolvedButton);
         syncThreadLayout(refs);
       });
     }
@@ -629,8 +636,13 @@
       syncThreadLayout(refsArg);
     }
 
+    let lastThreadsUpdate = 0;
+
     async function reloadThreads(publicMode) {
       if (!state.note) return;
+      const now = Date.now();
+      if (now - lastThreadsUpdate < 500) return;
+      lastThreadsUpdate = now;
       try {
         const endpoint = publicMode ? `/api/share/${state.note.shareId}` : `/api/notes/${state.note.id}`;
         const payload = await api(endpoint);
@@ -701,11 +713,11 @@
           </div>
           <div class="topbar-right">
             <jot-icon-button icon="preview" label="Preview" id="previewFab"></jot-icon-button>
+            <jot-icon-button icon="robot" label="Agent setup" id="agentButton"></jot-icon-button>
             <div class="share-popover-wrap" id="sharePopoverWrap">
               <jot-icon-button icon="share" label="Share" id="shareButton"></jot-icon-button>
               <div class="share-popover hidden" id="sharePopover"></div>
             </div>
-            <jot-icon-button icon="logout" label="Logout" id="logoutButton"></jot-icon-button>
             <button type="button" class="jot-btn-icon jot-btn-icon--md theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
           </div>
         </header>
@@ -756,6 +768,7 @@
             </div>
           </div>
           <div class="topbar-right">
+            <jot-icon-button icon="robot" label="Agent setup" id="agentButton"></jot-icon-button>
             <button type="button" class="jot-btn-icon jot-btn-icon--md theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
           </div>
         </header>
@@ -788,6 +801,7 @@
           </div>
           <div class="topbar-right">
             <jot-icon-button icon="preview" label="Preview" id="previewFab"></jot-icon-button>
+            <jot-icon-button icon="robot" label="Agent setup" id="agentButton"></jot-icon-button>
             <button type="button" class="jot-btn-icon jot-btn-icon--md theme-toggle" aria-label="Toggle theme">${themeIcon(document.documentElement.getAttribute("data-theme") || "dark")}</button>
           </div>
         </header>
@@ -871,6 +885,86 @@
     setTimeout(() => document.addEventListener("click", closeHandler), 0);
   }
 
+  function openAgentModal(refs) {
+    const baseUrl = `${location.protocol}//${location.host}`;
+    const currentNoteId = state.note?.id || "<note-id>";
+    const isOwnerView = state.viewer?.isOwner;
+
+    const lines = [];
+    if (isOwnerView) {
+      lines.push(
+        `# Install & connect your agent`,
+        `npx jot register my-jot ${baseUrl} <YOUR_API_KEY>`,
+        ``,
+        `# List notes`,
+        `npx jot my-jot list`,
+        ``,
+        `# Read this note`,
+        `npx jot my-jot read ${currentNoteId}`,
+        ``,
+        `# Create a note`,
+        `npx jot my-jot create "My note title"`,
+        ``,
+        `# Edit this note`,
+        `npx jot my-jot edit ${currentNoteId} '[{"oldText":"...","newText":"..."}]'`,
+        ``,
+        `# Comment on text in this note`,
+        `npx jot my-jot comment ${currentNoteId} "quoted text" "comment body"`,
+        ``,
+        `# Reply to a thread`,
+        `npx jot my-jot reply ${currentNoteId} <thread-id> "reply body"`,
+      );
+    } else {
+      const shareUrl = `${baseUrl}/s/${state.note?.shareId || shareId}`;
+      lines.push(
+        `# Connect your agent to this shared note`,
+        `npx jot register my-jot ${shareUrl}`,
+        ``,
+        `# Read the note`,
+        `npx jot my-jot read`,
+        ``,
+        `# Edit the note (if edit access)`,
+        `npx jot my-jot edit '[{"oldText":"...","newText":"..."}]'`,
+        ``,
+        `# Comment on text --name sets your display name`,
+        `npx jot my-jot comment "quoted text" "comment body" --name="My Agent"`,
+        ``,
+        `# Reply to a thread`,
+        `npx jot my-jot reply <thread-id> "reply body" --name="My Agent"`,
+      );
+    }
+    const instructions = lines.join("\n");
+    const hint = isOwnerView
+      ? "Create an API key in settings on the landing page, then give your agent these instructions:"
+      : "Give your agent these instructions to interact with this note:";
+
+    if (!refs.modalBackdrop) return;
+    state.modalOpen = true;
+    refs.modalBackdrop.classList.remove("hidden");
+    refs.modalBackdrop.innerHTML = `
+      <div class="modal agent-modal" role="dialog" aria-modal="true">
+        <div class="settings-header">
+          <h2 class="settings-title">Agent setup</h2>
+          <jot-icon-button icon="close" label="Close" id="agentModalClose"></jot-icon-button>
+        </div>
+        <p class="agent-hint">${escapeHtml(hint)}</p>
+        <pre class="agent-instructions"><code>${escapeHtml(instructions)}</code></pre>
+        <jot-button variant="ghost" size="sm" id="agentCopyBtn">copy to clipboard</jot-button>
+      </div>
+    `;
+
+    const close = () => { closeModal(refs); };
+    refs.modalBackdrop.querySelector("#agentModalClose").addEventListener("click", close);
+    refs.modalBackdrop.addEventListener("click", (e) => { if (e.target === refs.modalBackdrop) close(); });
+    refs.modalBackdrop.querySelector("#agentCopyBtn").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(instructions);
+        setButtonLabel(refs.modalBackdrop.querySelector("#agentCopyBtn"), "copied!");
+        setTimeout(() => setButtonLabel(refs.modalBackdrop.querySelector("#agentCopyBtn"), "copy to clipboard"), 1500);
+      } catch {}
+    });
+  }
+
   function openIdentityModalAsync(refs) {
     return new Promise((resolve) => {
       openIdentityModal(refs, false, resolve);
@@ -884,11 +978,13 @@
   }
 
   function updateResolvedButton(button) {
-    setButtonLabel(button, state.showResolved ? "hide resolved" : "resolved");
+    if (!button) return;
+    button.style.display = state.showComments ? "" : "none";
+    setButtonLabel(button, state.showResolved ? "hide resolved" : "show resolved");
   }
 
   function updateCommentsButton(button) {
-    setButtonLabel(button, state.showComments ? "hide comments" : "comments");
+    setButtonLabel(button, state.showComments ? "hide comments" : "show comments");
   }
 
   function scheduleLayout(refs) {
@@ -1069,8 +1165,6 @@
     return sortNodes(roots);
   }
 
-  const ACTION_ICON_MAP = { reply: "reply", "edit-message": "edit", "delete-message": "trash", "delete-thread": "trash" };
-
   function renderIconButton(action, threadId, messageId, label, danger = false) {
     const icon = ACTION_ICON_MAP[action] || action;
     return `<jot-icon-button icon="${escapeHtml(icon)}" label="${escapeHtml(label)}" size="sm" data-action="${escapeHtml(action)}" data-thread-id="${escapeHtml(threadId)}"${messageId ? ` data-message-id="${escapeHtml(messageId)}"` : ""}${danger ? " danger" : ""}></jot-icon-button>`;
@@ -1246,13 +1340,14 @@
           refs.commenterLabel.textContent = payload.viewer.commenterName || "anonymous";
         }
         state.pendingAnchor = null;
-        refs.selectionBubble.classList.add("hidden");
+        if (refs.selectionBubble) refs.selectionBubble.classList.add("hidden");
         updateCommentFab(refs);
+        lastThreadsUpdate = Date.now();
         syncThreadLayout(refs);
         if (reopenThreadId) {
           const stillExists = state.threads.find((item) => item.id === reopenThreadId);
           if (stillExists) {
-            setTimeout(() => openThreadDialog(reopenThreadId, refs, state.page === "public"), 50);
+            setTimeout(() => openThreadDialog(reopenThreadId, refs, state.page === "public"), 16);
           }
         }
       },
