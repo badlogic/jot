@@ -13,6 +13,7 @@
     (navigator.userAgent.includes("Mac") && "ontouchstart" in window && navigator.maxTouchPoints > 1);
 
   const themeIcon = window.__themeIcon || ((t) => t === "dark" ? "☀" : "☾");
+  let scrollSyncEnabled = localStorage.getItem("jot_scroll_sync") !== "off";
 
   let mermaidIdCounter = 0;
   let mermaidCache = [];
@@ -405,6 +406,15 @@
       logoutButton.addEventListener("click", logoutOwner);
     }
 
+    const scrollSyncButton = document.getElementById("scrollSyncButton");
+    if (scrollSyncButton) {
+      scrollSyncButton.addEventListener("click", () => {
+        scrollSyncEnabled = !scrollSyncEnabled;
+        localStorage.setItem("jot_scroll_sync", scrollSyncEnabled ? "on" : "off");
+        setButtonLabel(scrollSyncButton, scrollSyncEnabled ? "unsync scroll" : "sync scroll");
+      });
+    }
+
     let collabEditor = null;
 
     function initCollabEditor() {
@@ -578,6 +588,7 @@
       editorTextarea.addEventListener("scrollsync:rebuild", buildEditorLineOffsets);
 
       editorTextarea.addEventListener("scroll", () => {
+        if (!scrollSyncEnabled) return;
         if (scrollSyncSource === "preview") return;
         scrollSyncSource = "editor";
         clearSyncLock();
@@ -624,6 +635,7 @@
       });
 
       previewScroll.addEventListener("scroll", () => {
+        if (!scrollSyncEnabled) return;
         if (scrollSyncSource === "editor") return;
         scrollSyncSource = "preview";
         clearSyncLock();
@@ -978,6 +990,9 @@
         });
         setPreviewHtml(refsArg, payload.html);
         syncThreadLayout(refsArg);
+        if (refsArg.editorTextarea) {
+          refsArg.editorTextarea.dispatchEvent(new Event("scrollsync:rebuild"));
+        }
       }, 150);
     }
   }
@@ -1010,6 +1025,7 @@
           <section class="preview-stage" id="previewStage">
             <jot-icon-button icon="close" label="Close preview" id="previewCloseButton" class="preview-close-btn"></jot-icon-button>
             <div class="preview-controls" id="previewControls">
+              <jot-button variant="ghost" size="sm" id="scrollSyncButton">${scrollSyncEnabled ? "unsync scroll" : "sync scroll"}</jot-button>
               <jot-button variant="ghost" size="sm" id="commentsButton">hide comments</jot-button>
               <jot-button variant="ghost" size="sm" id="resolvedButton">resolved</jot-button>
             </div>
@@ -1091,9 +1107,11 @@
             <div id="disconnectedBanner" class="editor-disconnected hidden">Disconnected. Reconnecting...</div>
             <textarea id="editorTextarea" class="editor-textarea" spellcheck="false"></textarea>
           </section>
+          <div class="resize-handle" id="resizeHandle"></div>
           <section class="preview-stage" id="previewStage">
             <jot-icon-button icon="close" label="Close preview" id="previewCloseButton" class="preview-close-btn"></jot-icon-button>
             <div class="preview-controls" id="previewControls">
+              <jot-button variant="ghost" size="sm" id="scrollSyncButton">${scrollSyncEnabled ? "unsync scroll" : "sync scroll"}</jot-button>
               <jot-button variant="ghost" size="sm" id="commentsButton">hide comments</jot-button>
               <jot-button variant="ghost" size="sm" id="resolvedButton">resolved</jot-button>
             </div>
