@@ -893,7 +893,10 @@
     const lines = [];
     if (isOwnerView) {
       lines.push(
-        `# Install & connect your agent`,
+        `# Your user wants you to interact with a jot note using the CLI below.`,
+        `# Run the commands as needed to read, edit, and comment on the note.`,
+        ``,
+        `# Install & connect`,
         `npx @mariozechner/jot register my-jot ${baseUrl} <YOUR_API_KEY>`,
         ``,
         `# List notes`,
@@ -929,7 +932,10 @@
     } else {
       const shareUrl = `${baseUrl}/s/${state.note?.shareId || shareId}`;
       lines.push(
-        `# Connect your agent to this shared note`,
+        `# Your user wants you to interact with a shared jot note using the CLI below.`,
+        `# Run the commands as needed to read, edit, and comment on the note.`,
+        ``,
+        `# Connect to the shared note`,
         `npx @mariozechner/jot register my-jot ${shareUrl}`,
         ``,
         `# Read the note (includes thread/message IDs)`,
