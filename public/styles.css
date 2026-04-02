@@ -257,13 +257,18 @@ input:focus, textarea:focus { border-color: var(--muted); }
 .icon-action.copy-success { color: var(--green); }
 
 .workspace {
-  display: grid; grid-template-columns: 1fr 1fr;
+  display: grid; grid-template-columns: 1fr 4px 1fr;
   height: calc(100vh - var(--toolbar-height)); overflow: hidden;
 }
 .editor-pane {
-  border-right: 1px solid var(--line); background: var(--editor-bg); overflow: hidden;
+  background: var(--editor-bg); overflow: hidden;
   display: flex; flex-direction: column; position: relative;
 }
+.resize-handle {
+  width: 4px; cursor: col-resize; background: var(--line); position: relative; z-index: 20;
+  transition: background 0.15s;
+}
+.resize-handle:hover, .resize-handle.dragging { background: var(--blue, #58a6ff); }
 
 .editor-textarea {
   width: 100%; flex: 1; min-height: 0;
@@ -494,6 +499,7 @@ input:focus, textarea:focus { border-color: var(--muted); }
 /* --- Narrow / mobile --- */
 @media (max-width: 980px) {
   .workspace { grid-template-columns: 1fr; }
+  .resize-handle { display: none; }
   .editor-pane { border-right: 0; border-bottom: none; }
 
   /* Hide preview by default in editor, show when toggled */

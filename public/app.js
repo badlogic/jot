@@ -488,6 +488,217 @@
     if (previewScroll) previewScroll.addEventListener("scroll", () => scheduleLayout(refs));
     window.addEventListener("resize", () => scheduleLayout(refs));
 
+    // Scroll sync between editor and preview
+    if (editorTextarea && previewScroll && previewContent) {
+      let scrollSyncSource = null;
+      let scrollSyncTimer = null;
+      let editorLineOffsets = null;
+
+      function clearSyncLock() {
+        clearTimeout(scrollSyncTimer);
+        scrollSyncTimer = setTimeout(() => { scrollSyncSource = null; }, 150);
+      }
+
+      function getSourceLineElements() {
+        return previewContent.querySelectorAll("[data-source-line]");
+      }
+
+      function buildEditorLineOffsets() {
+        const mirror = document.createElement("div");
+        const cs = getComputedStyle(editorTextarea);
+        mirror.style.position = "absolute";
+        mirror.style.visibility = "hidden";
+        mirror.style.whiteSpace = "pre-wrap";
+        mirror.style.wordWrap = "break-word";
+        mirror.style.overflowWrap = "break-word";
+        mirror.style.width = cs.width;
+        mirror.style.fontFamily = cs.fontFamily;
+        mirror.style.fontSize = cs.fontSize;
+        mirror.style.lineHeight = cs.lineHeight;
+        mirror.style.letterSpacing = cs.letterSpacing;
+        mirror.style.paddingLeft = cs.paddingLeft;
+        mirror.style.paddingRight = cs.paddingRight;
+        mirror.style.paddingTop = cs.paddingTop;
+        mirror.style.borderLeft = cs.borderLeft;
+        mirror.style.borderRight = cs.borderRight;
+        mirror.style.boxSizing = cs.boxSizing;
+        mirror.style.tabSize = cs.tabSize;
+        document.body.appendChild(mirror);
+
+        const lines = editorTextarea.value.split("\n");
+        const offsets = new Array(lines.length);
+        let html = "";
+        for (let i = 0; i < lines.length; i++) {
+          html += `<span data-ln="${i}"></span>` + escapeHtml(lines[i]) + "\n";
+        }
+        mirror.innerHTML = html;
+
+        for (let i = 0; i < lines.length; i++) {
+          const marker = mirror.querySelector(`[data-ln="${i}"]`);
+          offsets[i] = marker ? marker.offsetTop : 0;
+        }
+
+        document.body.removeChild(mirror);
+        editorLineOffsets = offsets;
+      }
+
+      function editorPixelToSourceLine(px) {
+        if (!editorLineOffsets || !editorLineOffsets.length) return 0;
+        let lo = 0, hi = editorLineOffsets.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (editorLineOffsets[mid] <= px) lo = mid;
+          else hi = mid - 1;
+        }
+        const nextIdx = Math.min(lo + 1, editorLineOffsets.length - 1);
+        const span = editorLineOffsets[nextIdx] - editorLineOffsets[lo];
+        const frac = span > 0 ? (px - editorLineOffsets[lo]) / span : 0;
+        return lo + frac;
+      }
+
+      function sourceLineToEditorPixel(line) {
+        if (!editorLineOffsets || !editorLineOffsets.length) return 0;
+        const idx = Math.floor(line);
+        const frac = line - idx;
+        const clamped = Math.min(idx, editorLineOffsets.length - 1);
+        const nextIdx = Math.min(clamped + 1, editorLineOffsets.length - 1);
+        const base = editorLineOffsets[clamped];
+        const span = editorLineOffsets[nextIdx] - base;
+        return base + span * frac;
+      }
+
+      let offsetRebuildTimer = null;
+      function scheduleOffsetRebuild() {
+        clearTimeout(offsetRebuildTimer);
+        offsetRebuildTimer = setTimeout(buildEditorLineOffsets, 200);
+      }
+
+      editorTextarea.addEventListener("input", scheduleOffsetRebuild);
+      new ResizeObserver(scheduleOffsetRebuild).observe(editorTextarea);
+      editorTextarea.addEventListener("scrollsync:rebuild", buildEditorLineOffsets);
+
+      editorTextarea.addEventListener("scroll", () => {
+        if (scrollSyncSource === "preview") return;
+        scrollSyncSource = "editor";
+        clearSyncLock();
+
+        if (!editorLineOffsets) return;
+        const elements = getSourceLineElements();
+        if (!elements.length) return;
+
+        if (editorTextarea.scrollTop + editorTextarea.clientHeight >= editorTextarea.scrollHeight - 2) {
+          previewScroll.scrollTop = previewScroll.scrollHeight;
+          return;
+        }
+
+        const topLine = editorPixelToSourceLine(editorTextarea.scrollTop);
+
+        let prev = null;
+        let next = null;
+        for (const el of elements) {
+          const sl = parseInt(el.dataset.sourceLine, 10);
+          if (sl <= topLine) {
+            prev = el;
+          } else {
+            next = el;
+            break;
+          }
+        }
+
+        if (!prev) {
+          previewScroll.scrollTop = 0;
+          return;
+        }
+
+        const prevLine = parseInt(prev.dataset.sourceLine, 10);
+        let targetTop = prev.offsetTop - previewContent.offsetTop;
+
+        if (next) {
+          const nextLine = parseInt(next.dataset.sourceLine, 10);
+          const nextTop = next.offsetTop - previewContent.offsetTop;
+          const frac = nextLine > prevLine ? (topLine - prevLine) / (nextLine - prevLine) : 0;
+          targetTop += (nextTop - targetTop) * frac;
+        }
+
+        previewScroll.scrollTop = Math.max(0, targetTop);
+      });
+
+      previewScroll.addEventListener("scroll", () => {
+        if (scrollSyncSource === "editor") return;
+        scrollSyncSource = "preview";
+        clearSyncLock();
+
+        if (!editorLineOffsets) return;
+        const elements = getSourceLineElements();
+        if (!elements.length) return;
+
+        if (previewScroll.scrollTop + previewScroll.clientHeight >= previewScroll.scrollHeight - 2) {
+          editorTextarea.scrollTop = editorTextarea.scrollHeight;
+          return;
+        }
+
+        const scrollY = previewScroll.scrollTop;
+        let prev = null;
+        let next = null;
+        for (const el of elements) {
+          const elTop = el.offsetTop - previewContent.offsetTop;
+          if (elTop <= scrollY) {
+            prev = el;
+          } else {
+            next = el;
+            break;
+          }
+        }
+
+        if (!prev) {
+          editorTextarea.scrollTop = 0;
+          return;
+        }
+
+        const prevLine = parseInt(prev.dataset.sourceLine, 10);
+        let targetLine = prevLine;
+
+        if (next) {
+          const prevTop = prev.offsetTop - previewContent.offsetTop;
+          const nextTop = next.offsetTop - previewContent.offsetTop;
+          const nextLine = parseInt(next.dataset.sourceLine, 10);
+          const span = nextTop - prevTop;
+          const frac = span > 0 ? (scrollY - prevTop) / span : 0;
+          targetLine += (nextLine - prevLine) * frac;
+        }
+
+        editorTextarea.scrollTop = sourceLineToEditorPixel(targetLine);
+      });
+    }
+
+    // Resizable split pane
+    const resizeHandle = document.getElementById("resizeHandle");
+    if (resizeHandle) {
+      let dragging = false;
+      const workspace = document.querySelector(".workspace");
+      resizeHandle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        dragging = true;
+        resizeHandle.classList.add("dragging");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (!dragging || !workspace) return;
+        const rect = workspace.getBoundingClientRect();
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        const clamped = Math.max(20, Math.min(80, pct));
+        workspace.style.gridTemplateColumns = `${clamped}% 4px 1fr`;
+      });
+      document.addEventListener("mouseup", () => {
+        if (!dragging) return;
+        dragging = false;
+        resizeHandle.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      });
+    }
+
     document.addEventListener("selectionchange", () => {
       if (state.page === "list" || state.modalOpen) {
         return;
@@ -743,6 +954,7 @@
       }
       if (refsArg.editorTextarea) {
         refsArg.editorTextarea.value = payload.note.markdown || "";
+        refsArg.editorTextarea.dispatchEvent(new Event("scrollsync:rebuild"));
       }
       setPreviewHtml(refsArg, payload.note.renderedHtml || "");
       if (refsArg.commenterLabel) {
@@ -794,6 +1006,7 @@
             <div id="disconnectedBanner" class="editor-disconnected hidden">Disconnected. Reconnecting...</div>
             <textarea id="editorTextarea" class="editor-textarea" spellcheck="false"></textarea>
           </section>
+          <div class="resize-handle" id="resizeHandle"></div>
           <section class="preview-stage" id="previewStage">
             <jot-icon-button icon="close" label="Close preview" id="previewCloseButton" class="preview-close-btn"></jot-icon-button>
             <div class="preview-controls" id="previewControls">
