@@ -911,8 +911,8 @@
         `# Comment on text in this note`,
         `npx jot my-jot comment ${currentNoteId} "quoted text" "comment body"`,
         ``,
-        `# Reply to a thread`,
-        `npx jot my-jot reply ${currentNoteId} <thread-id> "reply body"`,
+        `# Reply to a specific message`,
+        `npx jot my-jot reply ${currentNoteId} <thread-id> <message-id> "reply body"`,
       );
     } else {
       const shareUrl = `${baseUrl}/s/${state.note?.shareId || shareId}`;
@@ -929,8 +929,8 @@
         `# Comment on text --name sets your display name`,
         `npx jot my-jot comment "quoted text" "comment body" --name="My Agent"`,
         ``,
-        `# Reply to a thread`,
-        `npx jot my-jot reply <thread-id> "reply body" --name="My Agent"`,
+        `# Reply to a specific message`,
+        `npx jot my-jot reply <thread-id> <message-id> "reply body" --name="My Agent"`,
       );
     }
     const instructions = lines.join("\n");

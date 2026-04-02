@@ -187,7 +187,7 @@ if (isShareInstance(instance)) {
           console.log();
           console.log(`Thread ${thread.id} on ${anchor}${thread.resolved ? " [resolved]" : ""}`);
           for (const msg of thread.messages) {
-            console.log(`  ${msg.authorName} (${msg.updatedAt}): ${msg.body}`);
+            console.log(`  [${msg.id}] ${msg.authorName} (${msg.updatedAt}): ${msg.body}`);
           }
         }
       }
@@ -221,12 +221,13 @@ if (isShareInstance(instance)) {
 
     case "reply": {
       const threadId = plainArgs[2];
-      const body = plainArgs.slice(3).join(" ");
-      if (!threadId || !body) {
-        console.error("Usage: jot <instance> reply <threadId> <body>");
+      const messageId = plainArgs[3];
+      const body = plainArgs.slice(4).join(" ");
+      if (!threadId || !messageId || !body) {
+        console.error("Usage: jot <instance> reply <threadId> <messageId> <body>");
         process.exit(1);
       }
-      await request(instance, "POST", `/api/share/${sid}/threads/${threadId}/replies`, { body, name: agentName });
+      await request(instance, "POST", `/api/share/${sid}/threads/${threadId}/replies`, { body, name: agentName, parentMessageId: messageId });
       console.log("Reply added");
       break;
     }
@@ -303,7 +304,7 @@ switch (subCommand) {
           console.log();
           console.log(`Thread ${thread.id} on ${anchor}${thread.resolved ? " [resolved]" : ""}`);
           for (const msg of thread.messages) {
-            console.log(`  ${msg.authorName} (${msg.updatedAt}): ${msg.body}`);
+            console.log(`  [${msg.id}] ${msg.authorName} (${msg.updatedAt}): ${msg.body}`);
           }
         }
       }
@@ -338,12 +339,13 @@ switch (subCommand) {
   case "reply": {
     const noteId = args[2];
     const threadId = args[3];
-    const body = args.slice(4).join(" ");
-    if (!noteId || !threadId || !body) {
-      console.error("Usage: jot <instance> reply <noteId> <threadId> <body>");
+    const messageId = args[4];
+    const body = args.slice(5).join(" ");
+    if (!noteId || !threadId || !messageId || !body) {
+      console.error("Usage: jot <instance> reply <noteId> <threadId> <messageId> <body>");
       process.exit(1);
     }
-    await request(instance, "POST", `/api/notes/${noteId}/threads/${threadId}/replies`, { body });
+    await request(instance, "POST", `/api/notes/${noteId}/threads/${threadId}/replies`, { body, parentMessageId: messageId });
     console.log("Reply added");
     break;
   }
@@ -437,7 +439,7 @@ Owner commands:
   jot <instance> read <id>                Read a note with comments
   jot <instance> create [title]           Create a new note
   jot <instance> comment <id> <quote> <b> Comment on quoted text
-  jot <instance> reply <id> <threadId> <b> Reply to a comment thread
+  jot <instance> reply <id> <tid> <mid> b  Reply to a specific message
   jot <instance> edit <id> '<edits>'      Apply edits (JSON array of {oldText, newText})
   jot <instance> update <id> title <val>  Update note title
   jot <instance> update <id> markdown <v> Replace full markdown
@@ -447,6 +449,6 @@ Shared note commands:
   jot <instance> read                     Read the shared note
   jot <instance> edit '<edits>'           Edit (if edit access)
   jot <instance> comment <quote> <body>   Comment on text
-  jot <instance> reply <threadId> <body>  Reply to a thread
+  jot <instance> reply <tid> <mid> <body> Reply to a specific message
   Use --name="Name" to set display name for comments`);
 }
