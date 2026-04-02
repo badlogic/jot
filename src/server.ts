@@ -1721,7 +1721,7 @@ function renderMarkdown(markdown: string) {
     ]),
     allowedAttributes: {
       a: ["href", "name", "target", "rel"],
-      img: ["src", "alt", "title"],
+      img: ["src", "alt", "title", "width", "height"],
       code: ["class"],
       span: ["class"],
     },
