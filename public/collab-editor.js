@@ -144,7 +144,7 @@ export function createCollabEditor(textarea, opts) {
   const mirror = document.createElement("div");
   mirror.className = "textarea-mirror";
   mirror.style.cssText = "position:absolute;visibility:hidden;overflow:hidden;white-space:pre-wrap;word-wrap:break-word;pointer-events:none;";
-  document.body.appendChild(mirror);
+  container.appendChild(mirror);
 
   let resizeObserver = null;
   try {

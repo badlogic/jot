@@ -341,7 +341,7 @@ input:focus, textarea:focus { border-color: var(--muted); }
 }
 
 /* --- Textarea mirror (hidden, for caret position measurement) --- */
-.textarea-mirror { position: absolute !important; visibility: hidden !important; overflow: hidden !important; pointer-events: none !important; z-index: -1; }
+.textarea-mirror { position: absolute !important; visibility: hidden !important; overflow: hidden !important; pointer-events: none !important; z-index: -1; top: 0; left: 0; }
 
 /* --- Share popover --- */
 .share-popover-wrap { position: relative; display: inline-flex; }
