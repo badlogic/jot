@@ -350,6 +350,67 @@ switch (subCommand) {
     break;
   }
 
+  case "resolve": {
+    const noteId = args[2];
+    const threadId = args[3];
+    if (!noteId || !threadId) {
+      console.error("Usage: jot <instance> resolve <noteId> <threadId>");
+      process.exit(1);
+    }
+    await request(instance, "PATCH", `/api/notes/${noteId}/threads/${threadId}`, { resolved: true });
+    console.log("Thread resolved");
+    break;
+  }
+
+  case "reopen": {
+    const noteId = args[2];
+    const threadId = args[3];
+    if (!noteId || !threadId) {
+      console.error("Usage: jot <instance> reopen <noteId> <threadId>");
+      process.exit(1);
+    }
+    await request(instance, "PATCH", `/api/notes/${noteId}/threads/${threadId}`, { resolved: false });
+    console.log("Thread reopened");
+    break;
+  }
+
+  case "delete-thread": {
+    const noteId = args[2];
+    const threadId = args[3];
+    if (!noteId || !threadId) {
+      console.error("Usage: jot <instance> delete-thread <noteId> <threadId>");
+      process.exit(1);
+    }
+    await request(instance, "DELETE", `/api/notes/${noteId}/threads/${threadId}`);
+    console.log("Thread deleted");
+    break;
+  }
+
+  case "edit-comment": {
+    const noteId = args[2];
+    const messageId = args[3];
+    const body = args.slice(4).join(" ");
+    if (!noteId || !messageId || !body) {
+      console.error("Usage: jot <instance> edit-comment <noteId> <messageId> <body>");
+      process.exit(1);
+    }
+    await request(instance, "PATCH", `/api/notes/${noteId}/messages/${messageId}`, { body });
+    console.log("Comment edited");
+    break;
+  }
+
+  case "delete-comment": {
+    const noteId = args[2];
+    const messageId = args[3];
+    if (!noteId || !messageId) {
+      console.error("Usage: jot <instance> delete-comment <noteId> <messageId>");
+      process.exit(1);
+    }
+    await request(instance, "DELETE", `/api/notes/${noteId}/messages/${messageId}`);
+    console.log("Comment deleted");
+    break;
+  }
+
   case "edit": {
     const noteId = args[2];
     const editsJson = args[3];
@@ -440,10 +501,15 @@ Owner commands:
   jot <instance> create [title]           Create a new note
   jot <instance> comment <id> <quote> <b> Comment on quoted text
   jot <instance> reply <id> <tid> <mid> b  Reply to a specific message
-  jot <instance> edit <id> '<edits>'      Apply edits (JSON array of {oldText, newText})
-  jot <instance> update <id> title <val>  Update note title
-  jot <instance> update <id> markdown <v> Replace full markdown
-  jot <instance> delete <id>              Delete a note
+  jot <instance> resolve <id> <tid>        Resolve a thread
+  jot <instance> reopen <id> <tid>         Reopen a thread
+  jot <instance> edit-comment <id> <mid> b Edit a comment
+  jot <instance> delete-comment <id> <mid> Delete a comment
+  jot <instance> delete-thread <id> <tid>  Delete a thread
+  jot <instance> edit <id> '<edits>'       Apply edits (JSON array of {oldText, newText})
+  jot <instance> update <id> title <val>   Update note title
+  jot <instance> update <id> markdown <v>  Replace full markdown
+  jot <instance> delete <id>               Delete a note
 
 Shared note commands:
   jot <instance> read                     Read the shared note

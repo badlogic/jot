@@ -501,6 +501,62 @@ app.post("/api/notes/:id/threads/:threadId/replies", requireOwnerApi, (req, res)
   res.json({ ok: true });
 });
 
+app.patch("/api/notes/:id/threads/:threadId", requireOwnerApi, (req, res) => {
+  const note = notes.get(String(req.params.id));
+  if (!note) { res.status(404).json({ ok: false, error: "Note not found." }); return; }
+  const thread = note.threads.find((t) => t.id === String(req.params.threadId));
+  if (!thread) { res.status(404).json({ ok: false, error: "Thread not found." }); return; }
+  thread.resolved = Boolean(req.body.resolved);
+  thread.updatedAt = nowIso();
+  note.updatedAt = thread.updatedAt;
+  persistNote(note);
+  broadcastThreadsUpdated(note);
+  res.json({ ok: true });
+});
+
+app.delete("/api/notes/:id/threads/:threadId", requireOwnerApi, (req, res) => {
+  const note = notes.get(String(req.params.id));
+  if (!note) { res.status(404).json({ ok: false, error: "Note not found." }); return; }
+  note.threads = note.threads.filter((t) => t.id !== String(req.params.threadId));
+  note.updatedAt = nowIso();
+  persistNote(note);
+  broadcastThreadsUpdated(note);
+  res.json({ ok: true });
+});
+
+app.patch("/api/notes/:id/messages/:messageId", requireOwnerApi, (req, res) => {
+  const note = notes.get(String(req.params.id));
+  if (!note) { res.status(404).json({ ok: false, error: "Note not found." }); return; }
+  const located = locateMessage(note, String(req.params.messageId));
+  if (!located) { res.status(404).json({ ok: false, error: "Message not found." }); return; }
+  const body = normalizeCommentBody(String(req.body.body || ""));
+  if (!body) { res.status(400).json({ ok: false, error: "Body is required." }); return; }
+  located.message.body = body;
+  located.message.updatedAt = nowIso();
+  located.thread.updatedAt = located.message.updatedAt;
+  note.updatedAt = located.message.updatedAt;
+  persistNote(note);
+  broadcastThreadsUpdated(note);
+  res.json({ ok: true });
+});
+
+app.delete("/api/notes/:id/messages/:messageId", requireOwnerApi, (req, res) => {
+  const note = notes.get(String(req.params.id));
+  if (!note) { res.status(404).json({ ok: false, error: "Note not found." }); return; }
+  const located = locateMessage(note, String(req.params.messageId));
+  if (!located) { res.status(404).json({ ok: false, error: "Message not found." }); return; }
+  located.thread.messages = located.thread.messages.filter((m) => m.id !== located.message.id);
+  if (located.thread.messages.length === 0) {
+    note.threads = note.threads.filter((t) => t.id !== located.thread.id);
+  } else {
+    located.thread.updatedAt = nowIso();
+  }
+  note.updatedAt = nowIso();
+  persistNote(note);
+  broadcastThreadsUpdated(note);
+  res.json({ ok: true });
+});
+
 app.delete("/api/notes/:id", requireOwnerApi, (req, res) => {
   const id = String(req.params.id);
   const note = notes.get(id);

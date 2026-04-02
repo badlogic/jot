@@ -899,7 +899,7 @@
         `# List notes`,
         `npx jot my-jot list`,
         ``,
-        `# Read this note`,
+        `# Read this note (includes thread/message IDs)`,
         `npx jot my-jot read ${currentNoteId}`,
         ``,
         `# Create a note`,
@@ -912,7 +912,16 @@
         `npx jot my-jot comment ${currentNoteId} "quoted text" "comment body"`,
         ``,
         `# Reply to a specific message`,
-        `npx jot my-jot reply ${currentNoteId} <thread-id> <message-id> "reply body"`,
+        `npx jot my-jot reply ${currentNoteId} <thread-id> <message-id> "reply"`,
+        ``,
+        `# Edit or delete a comment`,
+        `npx jot my-jot edit-comment ${currentNoteId} <message-id> "new body"`,
+        `npx jot my-jot delete-comment ${currentNoteId} <message-id>`,
+        ``,
+        `# Resolve, reopen, or delete a thread`,
+        `npx jot my-jot resolve ${currentNoteId} <thread-id>`,
+        `npx jot my-jot reopen ${currentNoteId} <thread-id>`,
+        `npx jot my-jot delete-thread ${currentNoteId} <thread-id>`,
       );
     } else {
       const shareUrl = `${baseUrl}/s/${state.note?.shareId || shareId}`;
@@ -920,17 +929,17 @@
         `# Connect your agent to this shared note`,
         `npx jot register my-jot ${shareUrl}`,
         ``,
-        `# Read the note`,
+        `# Read the note (includes thread/message IDs)`,
         `npx jot my-jot read`,
         ``,
         `# Edit the note (if edit access)`,
         `npx jot my-jot edit '[{"oldText":"...","newText":"..."}]'`,
         ``,
-        `# Comment on text --name sets your display name`,
+        `# Comment on text`,
         `npx jot my-jot comment "quoted text" "comment body" --name="My Agent"`,
         ``,
         `# Reply to a specific message`,
-        `npx jot my-jot reply <thread-id> <message-id> "reply body" --name="My Agent"`,
+        `npx jot my-jot reply <thread-id> <message-id> "reply" --name="My Agent"`,
       );
     }
     const instructions = lines.join("\n");
