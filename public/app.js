@@ -13,6 +13,7 @@
     (navigator.userAgent.includes("Mac") && "ontouchstart" in window && navigator.maxTouchPoints > 1);
 
   const themeIcon = window.__themeIcon || ((t) => t === "dark" ? "☀" : "☾");
+  let scrollSyncEnabled = localStorage.getItem("jot_scroll_sync") !== "off";
 
   let mermaidIdCounter = 0;
   let mermaidCache = [];
@@ -405,6 +406,15 @@
       logoutButton.addEventListener("click", logoutOwner);
     }
 
+    const scrollSyncButton = document.getElementById("scrollSyncButton");
+    if (scrollSyncButton) {
+      scrollSyncButton.addEventListener("click", () => {
+        scrollSyncEnabled = !scrollSyncEnabled;
+        localStorage.setItem("jot_scroll_sync", scrollSyncEnabled ? "on" : "off");
+        setButtonLabel(scrollSyncButton, scrollSyncEnabled ? "unsync scroll" : "sync scroll");
+      });
+    }
+
     let collabEditor = null;
 
     function initCollabEditor() {
@@ -487,6 +497,220 @@
 
     if (previewScroll) previewScroll.addEventListener("scroll", () => scheduleLayout(refs));
     window.addEventListener("resize", () => scheduleLayout(refs));
+
+    // Scroll sync between editor and preview
+    if (editorTextarea && previewScroll && previewContent) {
+      let scrollSyncSource = null;
+      let scrollSyncTimer = null;
+      let editorLineOffsets = null;
+      let sourceLineAnchors = null;
+
+      function clearSyncLock() {
+        clearTimeout(scrollSyncTimer);
+        scrollSyncTimer = setTimeout(() => { scrollSyncSource = null; }, 150);
+      }
+
+      function buildSourceLineAnchors() {
+        const els = previewContent.querySelectorAll("[data-source-line]");
+        sourceLineAnchors = Array.from(els).map(el => ({
+          el,
+          line: parseInt(el.dataset.sourceLine, 10),
+        }));
+      }
+
+      function buildEditorLineOffsets() {
+        const mirror = document.createElement("div");
+        const cs = getComputedStyle(editorTextarea);
+        mirror.style.position = "absolute";
+        mirror.style.visibility = "hidden";
+        mirror.style.whiteSpace = "pre-wrap";
+        mirror.style.wordWrap = "break-word";
+        mirror.style.overflowWrap = "break-word";
+        mirror.style.width = cs.width;
+        mirror.style.fontFamily = cs.fontFamily;
+        mirror.style.fontSize = cs.fontSize;
+        mirror.style.lineHeight = cs.lineHeight;
+        mirror.style.letterSpacing = cs.letterSpacing;
+        mirror.style.paddingLeft = cs.paddingLeft;
+        mirror.style.paddingRight = cs.paddingRight;
+        mirror.style.paddingTop = cs.paddingTop;
+        mirror.style.borderLeft = cs.borderLeft;
+        mirror.style.borderRight = cs.borderRight;
+        mirror.style.boxSizing = cs.boxSizing;
+        mirror.style.tabSize = cs.tabSize;
+        document.body.appendChild(mirror);
+
+        const lines = editorTextarea.value.split("\n");
+        const offsets = new Array(lines.length);
+        let html = "";
+        for (let i = 0; i < lines.length; i++) {
+          html += `<span data-ln="${i}"></span>` + escapeHtml(lines[i]) + "\n";
+        }
+        mirror.innerHTML = html;
+
+        const markers = mirror.querySelectorAll("[data-ln]");
+        for (let i = 0; i < markers.length; i++) {
+          offsets[i] = markers[i].offsetTop;
+        }
+
+        document.body.removeChild(mirror);
+        editorLineOffsets = offsets;
+      }
+
+      function editorPixelToSourceLine(px) {
+        if (!editorLineOffsets || !editorLineOffsets.length) return 0;
+        let lo = 0, hi = editorLineOffsets.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (editorLineOffsets[mid] <= px) lo = mid;
+          else hi = mid - 1;
+        }
+        const nextIdx = Math.min(lo + 1, editorLineOffsets.length - 1);
+        const span = editorLineOffsets[nextIdx] - editorLineOffsets[lo];
+        const frac = span > 0 ? (px - editorLineOffsets[lo]) / span : 0;
+        return lo + frac;
+      }
+
+      function sourceLineToEditorPixel(line) {
+        if (!editorLineOffsets || !editorLineOffsets.length) return 0;
+        const idx = Math.floor(line);
+        const frac = line - idx;
+        const clamped = Math.min(idx, editorLineOffsets.length - 1);
+        const nextIdx = Math.min(clamped + 1, editorLineOffsets.length - 1);
+        const base = editorLineOffsets[clamped];
+        const span = editorLineOffsets[nextIdx] - base;
+        return base + span * frac;
+      }
+
+      let offsetRebuildTimer = null;
+      function scheduleOffsetRebuild() {
+        clearTimeout(offsetRebuildTimer);
+        offsetRebuildTimer = setTimeout(buildEditorLineOffsets, 200);
+      }
+
+      editorTextarea.addEventListener("input", scheduleOffsetRebuild);
+      new ResizeObserver(scheduleOffsetRebuild).observe(editorTextarea);
+      editorTextarea.addEventListener("scrollsync:rebuild", buildEditorLineOffsets);
+      new MutationObserver(buildSourceLineAnchors).observe(previewContent, { childList: true, subtree: true });
+
+      editorTextarea.addEventListener("scroll", () => {
+        if (!scrollSyncEnabled) return;
+        if (scrollSyncSource === "preview") return;
+        scrollSyncSource = "editor";
+        clearSyncLock();
+
+        if (!editorLineOffsets || !sourceLineAnchors || !sourceLineAnchors.length) return;
+
+        if (editorTextarea.scrollTop + editorTextarea.clientHeight >= editorTextarea.scrollHeight - 2) {
+          previewScroll.scrollTop = previewScroll.scrollHeight;
+          return;
+        }
+
+        const topLine = editorPixelToSourceLine(editorTextarea.scrollTop);
+
+        let prev = null;
+        let next = null;
+        for (const a of sourceLineAnchors) {
+          if (a.line <= topLine) {
+            prev = a;
+          } else {
+            next = a;
+            break;
+          }
+        }
+
+        if (!prev) {
+          previewScroll.scrollTop = 0;
+          return;
+        }
+
+        let targetTop = prev.el.offsetTop - previewContent.offsetTop;
+
+        if (next) {
+          const nextTop = next.el.offsetTop - previewContent.offsetTop;
+          const frac = next.line > prev.line ? (topLine - prev.line) / (next.line - prev.line) : 0;
+          targetTop += (nextTop - targetTop) * frac;
+        }
+
+        previewScroll.scrollTop = Math.max(0, targetTop);
+      });
+
+      previewScroll.addEventListener("scroll", () => {
+        if (!scrollSyncEnabled) return;
+        if (scrollSyncSource === "editor") return;
+        scrollSyncSource = "preview";
+        clearSyncLock();
+
+        if (!editorLineOffsets || !sourceLineAnchors || !sourceLineAnchors.length) return;
+
+        if (previewScroll.scrollTop + previewScroll.clientHeight >= previewScroll.scrollHeight - 2) {
+          editorTextarea.scrollTop = editorTextarea.scrollHeight;
+          return;
+        }
+
+        const scrollY = previewScroll.scrollTop;
+        let prev = null;
+        let next = null;
+        for (const a of sourceLineAnchors) {
+          const elTop = a.el.offsetTop - previewContent.offsetTop;
+          if (elTop <= scrollY) {
+            prev = a;
+          } else {
+            next = a;
+            break;
+          }
+        }
+
+        if (!prev) {
+          editorTextarea.scrollTop = 0;
+          return;
+        }
+
+        let targetLine = prev.line;
+
+        if (next) {
+          const prevTop = prev.el.offsetTop - previewContent.offsetTop;
+          const nextTop = next.el.offsetTop - previewContent.offsetTop;
+          const span = nextTop - prevTop;
+          const frac = span > 0 ? (scrollY - prevTop) / span : 0;
+          targetLine += (next.line - prev.line) * frac;
+        }
+
+        editorTextarea.scrollTop = sourceLineToEditorPixel(targetLine);
+      });
+    }
+
+    // Resizable split pane
+    const resizeHandle = document.getElementById("resizeHandle");
+    if (resizeHandle) {
+      let dragging = false;
+      const workspace = document.querySelector(".workspace");
+      function stopDrag() {
+        if (!dragging) return;
+        dragging = false;
+        resizeHandle.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+      resizeHandle.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        resizeHandle.setPointerCapture(e.pointerId);
+        dragging = true;
+        resizeHandle.classList.add("dragging");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+      });
+      document.addEventListener("pointermove", (e) => {
+        if (!dragging || !workspace) return;
+        const rect = workspace.getBoundingClientRect();
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        const clamped = Math.max(20, Math.min(80, pct));
+        workspace.style.gridTemplateColumns = `${clamped}fr 4px ${100 - clamped}fr`;
+      });
+      document.addEventListener("pointerup", stopDrag);
+      document.addEventListener("pointercancel", stopDrag);
+      resizeHandle.addEventListener("lostpointercapture", stopDrag);
+    }
 
     document.addEventListener("selectionchange", () => {
       if (state.page === "list" || state.modalOpen) {
@@ -743,6 +967,7 @@
       }
       if (refsArg.editorTextarea) {
         refsArg.editorTextarea.value = payload.note.markdown || "";
+        refsArg.editorTextarea.dispatchEvent(new Event("scrollsync:rebuild"));
       }
       setPreviewHtml(refsArg, payload.note.renderedHtml || "");
       if (refsArg.commenterLabel) {
@@ -766,6 +991,9 @@
         });
         setPreviewHtml(refsArg, payload.html);
         syncThreadLayout(refsArg);
+        if (refsArg.editorTextarea) {
+          refsArg.editorTextarea.dispatchEvent(new Event("scrollsync:rebuild"));
+        }
       }, 150);
     }
   }
@@ -794,9 +1022,11 @@
             <div id="disconnectedBanner" class="editor-disconnected hidden">Disconnected. Reconnecting...</div>
             <textarea id="editorTextarea" class="editor-textarea" spellcheck="false"></textarea>
           </section>
+          <div class="resize-handle" id="resizeHandle"></div>
           <section class="preview-stage" id="previewStage">
             <jot-icon-button icon="close" label="Close preview" id="previewCloseButton" class="preview-close-btn"></jot-icon-button>
             <div class="preview-controls" id="previewControls">
+              <jot-button variant="ghost" size="sm" id="scrollSyncButton">${scrollSyncEnabled ? "unsync scroll" : "sync scroll"}</jot-button>
               <jot-button variant="ghost" size="sm" id="commentsButton">hide comments</jot-button>
               <jot-button variant="ghost" size="sm" id="resolvedButton">resolved</jot-button>
             </div>
@@ -878,9 +1108,11 @@
             <div id="disconnectedBanner" class="editor-disconnected hidden">Disconnected. Reconnecting...</div>
             <textarea id="editorTextarea" class="editor-textarea" spellcheck="false"></textarea>
           </section>
+          <div class="resize-handle" id="resizeHandle"></div>
           <section class="preview-stage" id="previewStage">
             <jot-icon-button icon="close" label="Close preview" id="previewCloseButton" class="preview-close-btn"></jot-icon-button>
             <div class="preview-controls" id="previewControls">
+              <jot-button variant="ghost" size="sm" id="scrollSyncButton">${scrollSyncEnabled ? "unsync scroll" : "sync scroll"}</jot-button>
               <jot-button variant="ghost" size="sm" id="commentsButton">hide comments</jot-button>
               <jot-button variant="ghost" size="sm" id="resolvedButton">resolved</jot-button>
             </div>

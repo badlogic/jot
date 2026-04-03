@@ -139,18 +139,62 @@ const ownerCookieMaxAgeSeconds = 60 * 60 * 24 * 30;
 const commenterCookieMaxAgeSeconds = 60 * 60 * 24 * 365;
 const notes = new Map<string, NoteRecord>();
 
+function slAttr(token: any) {
+  return token.sourceLine != null ? ` data-source-line="${token.sourceLine}"` : "";
+}
+
 const codeRenderer = new marked.Renderer();
-codeRenderer.code = ({ text, lang }: Tokens.Code) => {
-  const language = (lang || "").trim().split(/\s+/)[0];
+codeRenderer.code = function (token: Tokens.Code) {
+  const language = (token.lang || "").trim().split(/\s+/)[0];
   if (language === "mermaid") {
-    return `<pre class="mermaid">${escapeHtml(text)}</pre>`;
+    return `<pre class="mermaid"${slAttr(token)}>${escapeHtml(token.text)}</pre>`;
   }
   const validLanguage = language && hljs.getLanguage(language) ? language : null;
   const highlighted = validLanguage
-    ? hljs.highlight(text, { language: validLanguage }).value
-    : escapeHtml(text);
+    ? hljs.highlight(token.text, { language: validLanguage }).value
+    : escapeHtml(token.text);
   const languageClass = validLanguage ? ` class="hljs language-${escapeHtml(validLanguage)}"` : ' class="hljs"';
-  return `<pre><code${languageClass}>${highlighted}</code></pre>`;
+  return `<pre${slAttr(token)}><code${languageClass}>${highlighted}</code></pre>`;
+};
+codeRenderer.heading = function (token: Tokens.Heading) {
+  return `<h${token.depth}${slAttr(token)}>${this.parser.parseInline(token.tokens)}</h${token.depth}>\n`;
+};
+codeRenderer.paragraph = function (token: Tokens.Paragraph) {
+  return `<p${slAttr(token)}>${this.parser.parseInline(token.tokens)}</p>\n`;
+};
+codeRenderer.blockquote = function (token: Tokens.Blockquote) {
+  return `<blockquote${slAttr(token)}>\n${this.parser.parse(token.tokens)}</blockquote>\n`;
+};
+codeRenderer.list = function (token: Tokens.List) {
+  const tag = token.ordered ? "ol" : "ul";
+  let body = "";
+  for (const item of token.items) {
+    body += this.listitem(item);
+  }
+  return `<${tag}${slAttr(token)}>\n${body}</${tag}>\n`;
+};
+codeRenderer.listitem = function (token: Tokens.ListItem) {
+  const html = marked.Renderer.prototype.listitem.call(this, token);
+  return html.replace("<li>", `<li${slAttr(token)}>`);
+};
+codeRenderer.table = function (token: Tokens.Table) {
+  let header = "";
+  for (const cell of token.header) {
+    header += this.tablecell(cell);
+  }
+  header = this.tablerow({ text: header } as Tokens.TableRow);
+  let body = "";
+  for (const row of token.rows) {
+    let rowContent = "";
+    for (const cell of row) {
+      rowContent += this.tablecell(cell);
+    }
+    body += this.tablerow({ text: rowContent } as Tokens.TableRow);
+  }
+  return `<table${slAttr(token)}>\n<thead>\n${header}</thead>\n<tbody>\n${body}</tbody>\n</table>\n`;
+};
+codeRenderer.hr = function (token: Tokens.Hr) {
+  return `<hr${slAttr(token)}>\n`;
 };
 
 marked.setOptions({
@@ -1697,8 +1741,23 @@ function sanitizeAnchor(input: unknown) {
   return { quote, prefix, suffix, start, end } satisfies CommentAnchor;
 }
 
+function annotateSourceLines(tokens: any[], startLine: number) {
+  let line = startLine;
+  for (const token of tokens) {
+    token.sourceLine = line;
+    if (token.type === "list" && token.items) {
+      annotateSourceLines(token.items, line);
+    } else if ((token.type === "blockquote" || token.type === "list_item") && token.tokens) {
+      annotateSourceLines(token.tokens, line);
+    }
+    line += (token.raw.match(/\n/g) || []).length;
+  }
+}
+
 function renderMarkdown(markdown: string) {
-  const rawHtml = marked.parse(markdown) as string;
+  const tokens = marked.lexer(markdown);
+  annotateSourceLines(tokens, 0);
+  const rawHtml = marked.parser(tokens);
   return sanitizeHtml(rawHtml, {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat([
       "img",
@@ -1724,6 +1783,20 @@ function renderMarkdown(markdown: string) {
       img: ["src", "alt", "title"],
       code: ["class"],
       span: ["class"],
+      h1: ["data-source-line"],
+      h2: ["data-source-line"],
+      h3: ["data-source-line"],
+      h4: ["data-source-line"],
+      h5: ["data-source-line"],
+      h6: ["data-source-line"],
+      p: ["data-source-line"],
+      pre: ["data-source-line"],
+      blockquote: ["data-source-line"],
+      ul: ["data-source-line"],
+      ol: ["data-source-line"],
+      li: ["data-source-line"],
+      table: ["data-source-line"],
+      hr: ["data-source-line"],
     },
     allowedClasses: {
       code: ["hljs", /^language-/],
