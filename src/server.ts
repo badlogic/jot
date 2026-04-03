@@ -173,6 +173,10 @@ codeRenderer.list = function (token: Tokens.List) {
   }
   return `<${tag}${slAttr(token)}>\n${body}</${tag}>\n`;
 };
+codeRenderer.listitem = function (token: Tokens.ListItem) {
+  const html = marked.Renderer.prototype.listitem.call(this, token);
+  return html.replace("<li>", `<li${slAttr(token)}>`);
+};
 codeRenderer.table = function (token: Tokens.Table) {
   let header = "";
   for (const cell of token.header) {
@@ -1737,13 +1741,22 @@ function sanitizeAnchor(input: unknown) {
   return { quote, prefix, suffix, start, end } satisfies CommentAnchor;
 }
 
-function renderMarkdown(markdown: string) {
-  const tokens = marked.lexer(markdown);
-  let line = 0;
+function annotateSourceLines(tokens: any[], startLine: number) {
+  let line = startLine;
   for (const token of tokens) {
-    (token as any).sourceLine = line;
+    token.sourceLine = line;
+    if (token.type === "list" && token.items) {
+      annotateSourceLines(token.items, line);
+    } else if ((token.type === "blockquote" || token.type === "list_item") && token.tokens) {
+      annotateSourceLines(token.tokens, line);
+    }
     line += (token.raw.match(/\n/g) || []).length;
   }
+}
+
+function renderMarkdown(markdown: string) {
+  const tokens = marked.lexer(markdown);
+  annotateSourceLines(tokens, 0);
   const rawHtml = marked.parser(tokens);
   return sanitizeHtml(rawHtml, {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat([
@@ -1781,6 +1794,7 @@ function renderMarkdown(markdown: string) {
       blockquote: ["data-source-line"],
       ul: ["data-source-line"],
       ol: ["data-source-line"],
+      li: ["data-source-line"],
       table: ["data-source-line"],
       hr: ["data-source-line"],
     },

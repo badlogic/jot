@@ -503,14 +503,19 @@
       let scrollSyncSource = null;
       let scrollSyncTimer = null;
       let editorLineOffsets = null;
+      let sourceLineAnchors = null;
 
       function clearSyncLock() {
         clearTimeout(scrollSyncTimer);
         scrollSyncTimer = setTimeout(() => { scrollSyncSource = null; }, 150);
       }
 
-      function getSourceLineElements() {
-        return previewContent.querySelectorAll("[data-source-line]");
+      function buildSourceLineAnchors() {
+        const els = previewContent.querySelectorAll("[data-source-line]");
+        sourceLineAnchors = Array.from(els).map(el => ({
+          el,
+          line: parseInt(el.dataset.sourceLine, 10),
+        }));
       }
 
       function buildEditorLineOffsets() {
@@ -543,9 +548,9 @@
         }
         mirror.innerHTML = html;
 
-        for (let i = 0; i < lines.length; i++) {
-          const marker = mirror.querySelector(`[data-ln="${i}"]`);
-          offsets[i] = marker ? marker.offsetTop : 0;
+        const markers = mirror.querySelectorAll("[data-ln]");
+        for (let i = 0; i < markers.length; i++) {
+          offsets[i] = markers[i].offsetTop;
         }
 
         document.body.removeChild(mirror);
@@ -586,6 +591,7 @@
       editorTextarea.addEventListener("input", scheduleOffsetRebuild);
       new ResizeObserver(scheduleOffsetRebuild).observe(editorTextarea);
       editorTextarea.addEventListener("scrollsync:rebuild", buildEditorLineOffsets);
+      new MutationObserver(buildSourceLineAnchors).observe(previewContent, { childList: true, subtree: true });
 
       editorTextarea.addEventListener("scroll", () => {
         if (!scrollSyncEnabled) return;
@@ -593,9 +599,7 @@
         scrollSyncSource = "editor";
         clearSyncLock();
 
-        if (!editorLineOffsets) return;
-        const elements = getSourceLineElements();
-        if (!elements.length) return;
+        if (!editorLineOffsets || !sourceLineAnchors || !sourceLineAnchors.length) return;
 
         if (editorTextarea.scrollTop + editorTextarea.clientHeight >= editorTextarea.scrollHeight - 2) {
           previewScroll.scrollTop = previewScroll.scrollHeight;
@@ -606,12 +610,11 @@
 
         let prev = null;
         let next = null;
-        for (const el of elements) {
-          const sl = parseInt(el.dataset.sourceLine, 10);
-          if (sl <= topLine) {
-            prev = el;
+        for (const a of sourceLineAnchors) {
+          if (a.line <= topLine) {
+            prev = a;
           } else {
-            next = el;
+            next = a;
             break;
           }
         }
@@ -621,13 +624,11 @@
           return;
         }
 
-        const prevLine = parseInt(prev.dataset.sourceLine, 10);
-        let targetTop = prev.offsetTop - previewContent.offsetTop;
+        let targetTop = prev.el.offsetTop - previewContent.offsetTop;
 
         if (next) {
-          const nextLine = parseInt(next.dataset.sourceLine, 10);
-          const nextTop = next.offsetTop - previewContent.offsetTop;
-          const frac = nextLine > prevLine ? (topLine - prevLine) / (nextLine - prevLine) : 0;
+          const nextTop = next.el.offsetTop - previewContent.offsetTop;
+          const frac = next.line > prev.line ? (topLine - prev.line) / (next.line - prev.line) : 0;
           targetTop += (nextTop - targetTop) * frac;
         }
 
@@ -640,9 +641,7 @@
         scrollSyncSource = "preview";
         clearSyncLock();
 
-        if (!editorLineOffsets) return;
-        const elements = getSourceLineElements();
-        if (!elements.length) return;
+        if (!editorLineOffsets || !sourceLineAnchors || !sourceLineAnchors.length) return;
 
         if (previewScroll.scrollTop + previewScroll.clientHeight >= previewScroll.scrollHeight - 2) {
           editorTextarea.scrollTop = editorTextarea.scrollHeight;
@@ -652,12 +651,12 @@
         const scrollY = previewScroll.scrollTop;
         let prev = null;
         let next = null;
-        for (const el of elements) {
-          const elTop = el.offsetTop - previewContent.offsetTop;
+        for (const a of sourceLineAnchors) {
+          const elTop = a.el.offsetTop - previewContent.offsetTop;
           if (elTop <= scrollY) {
-            prev = el;
+            prev = a;
           } else {
-            next = el;
+            next = a;
             break;
           }
         }
@@ -667,16 +666,14 @@
           return;
         }
 
-        const prevLine = parseInt(prev.dataset.sourceLine, 10);
-        let targetLine = prevLine;
+        let targetLine = prev.line;
 
         if (next) {
-          const prevTop = prev.offsetTop - previewContent.offsetTop;
-          const nextTop = next.offsetTop - previewContent.offsetTop;
-          const nextLine = parseInt(next.dataset.sourceLine, 10);
+          const prevTop = prev.el.offsetTop - previewContent.offsetTop;
+          const nextTop = next.el.offsetTop - previewContent.offsetTop;
           const span = nextTop - prevTop;
           const frac = span > 0 ? (scrollY - prevTop) / span : 0;
-          targetLine += (nextLine - prevLine) * frac;
+          targetLine += (next.line - prev.line) * frac;
         }
 
         editorTextarea.scrollTop = sourceLineToEditorPixel(targetLine);
@@ -688,27 +685,31 @@
     if (resizeHandle) {
       let dragging = false;
       const workspace = document.querySelector(".workspace");
-      resizeHandle.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        dragging = true;
-        resizeHandle.classList.add("dragging");
-        document.body.style.cursor = "col-resize";
-        document.body.style.userSelect = "none";
-      });
-      document.addEventListener("mousemove", (e) => {
-        if (!dragging || !workspace) return;
-        const rect = workspace.getBoundingClientRect();
-        const pct = ((e.clientX - rect.left) / rect.width) * 100;
-        const clamped = Math.max(20, Math.min(80, pct));
-        workspace.style.gridTemplateColumns = `${clamped}% 4px 1fr`;
-      });
-      document.addEventListener("mouseup", () => {
+      function stopDrag() {
         if (!dragging) return;
         dragging = false;
         resizeHandle.classList.remove("dragging");
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
+      }
+      resizeHandle.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        resizeHandle.setPointerCapture(e.pointerId);
+        dragging = true;
+        resizeHandle.classList.add("dragging");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
       });
+      document.addEventListener("pointermove", (e) => {
+        if (!dragging || !workspace) return;
+        const rect = workspace.getBoundingClientRect();
+        const pct = ((e.clientX - rect.left) / rect.width) * 100;
+        const clamped = Math.max(20, Math.min(80, pct));
+        workspace.style.gridTemplateColumns = `${clamped}fr 4px ${100 - clamped}fr`;
+      });
+      document.addEventListener("pointerup", stopDrag);
+      document.addEventListener("pointercancel", stopDrag);
+      resizeHandle.addEventListener("lostpointercapture", stopDrag);
     }
 
     document.addEventListener("selectionchange", () => {
