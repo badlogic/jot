@@ -25,6 +25,7 @@ Open `http://localhost:3210`. Set the owner password on first visit.
 - Dark and light theme
 - Mobile support
 - `.md` files on disk (derived from collaborative state)
+- Inline math rendering in preview/share views via KaTeX (`$...$` only for now)
 
 ## Server
 
@@ -52,6 +53,10 @@ Click the share icon in the editor to configure access:
 - **Edit & comment**: full collaborative editor with comments
 
 Each note has a stable share URL (`/s/<id>`). Anyone with the link gets the configured level of access, both in the browser and via the CLI. Toggle access without changing the link.
+
+### Math support
+
+Jot renders inline math in preview and shared views using KaTeX. The current supported delimiter is inline `$...$`. Block-math delimiters such as `$$...$$` are intentionally not supported yet because the markdown render pipeline currently breaks them apart before KaTeX sees them.
 
 ## CLI
 

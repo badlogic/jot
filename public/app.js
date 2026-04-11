@@ -5,6 +5,23 @@
   const noteId = document.body.dataset.noteId || "";
   const shareId = document.body.dataset.shareId || "";
 
+  function renderMathInPreview(element) {
+    if (!element || typeof window.renderMathInElement !== "function") {
+      return;
+    }
+    try {
+      window.renderMathInElement(element, {
+        delimiters: [
+          { left: "$", right: "$", display: false },
+        ],
+        throwOnError: false,
+        strict: "ignore",
+      });
+    } catch (error) {
+      console.warn("Failed to render math", error);
+    }
+  }
+
   if (!app || !page) {
     return;
   }
