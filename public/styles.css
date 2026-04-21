@@ -101,9 +101,10 @@ html, body {
 body { min-height: 100vh; }
 
 [data-page="editor"], [data-page="editor"] .app-root { height: 100vh; overflow: hidden; }
-[data-page="public"], [data-page="public"] .app-root { height: 100vh; overflow: hidden; }
-[data-page="public"] .app-root { display: flex; flex-direction: column; }
-[data-page="public"] .preview-stage { flex: 1; min-height: 0; }
+[data-page="public"], [data-page="public"] .app-root { min-height: 100vh; height: auto; overflow: visible; }
+[data-page="public"] .app-root { display: block; }
+[data-page="public"] .preview-stage { flex: none; min-height: auto; height: auto; overflow: visible; }
+[data-page="public"] .preview-scroll { height: auto; overflow: visible; }
 a { color: inherit; text-decoration: none; }
 button, input, textarea { font: inherit; }
 
