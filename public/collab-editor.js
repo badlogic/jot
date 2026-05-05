@@ -11,6 +11,17 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 const PRESENCE_STALE_MS = 60000;
 
+// crypto.randomUUID is only available in secure contexts (HTTPS, localhost, file://).
+// Fall back to crypto.getRandomValues so plain-HTTP origins (e.g. Docker on a LAN IP) still work.
+const randomUUID = () => {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4
+  b[8] = (b[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+};
+
 function isWordChar(ch) { return /[0-9A-Za-z_]/.test(ch || ""); }
 
 function readInsertText(event) {
@@ -160,7 +171,7 @@ export function createCollabEditor(textarea, opts) {
       }
     }
     return {
-      bunchId: `${clientId}:${nextBunchIdCounter++}:${crypto.randomUUID()}`,
+      bunchId: `${clientId}:${nextBunchIdCounter++}:${randomUUID()}`,
       counter: 0,
     };
   }
